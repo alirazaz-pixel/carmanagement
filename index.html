@@ -402,14 +402,12 @@ select option{background:var(--bg3);}
 <!-- FIREBASE CONFIG SETUP - User fills this in -->
 <script>
 window.FIREBASE_CONFIG = {
-  // ⚠️  PASTE YOUR FIREBASE CONFIG HERE
-  // Go to: Firebase Console → Project Settings → Your Apps → SDK setup
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyAOf0G2kBuiOpQF6NBq52wCcNl-Z-oW2uA",
+  authDomain: "car-management-78deb.firebaseapp.com",
+  projectId: "car-management-78deb",
+  storageBucket: "car-management-78deb.firebasestorage.app",
+  messagingSenderId: "723180461602",
+  appId: "1:723180461602:web:cb134e95d34564dab4b47b"
 };
 </script>
 
@@ -731,7 +729,6 @@ function initFirebase() {
   const cfg = saved ? JSON.parse(saved) : window.FIREBASE_CONFIG;
 
   if (!cfg.apiKey) {
-    document.getElementById('firebase-setup-banner').style.display = 'block';
     setSyncStatus(false);
     loadLocalData();
     return;
