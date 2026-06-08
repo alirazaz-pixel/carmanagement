@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FleetLedger</title>
+<meta name="description" content="Track your fleet — fuel, service, finances, P&L"/>
+<meta name="theme-color" content="#0f0f1a"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
+<style>
+:root {
+  --bg:       #0f0f1a;
+  --bg2:      #161625;
+  --bg3:      #1e1e32;
+  --bg4:      #252540;
+  --border:   rgba(255,255,255,0.08);
+  --border2:  rgba(255,255,255,0.04);
+  --text:     #f0f0f8;
+  --text2:    #9898b8;
+  --text3:    #5a5a78;
+  --gold:     #e8c44a;
+  --gold2:    #f5d978;
+  --gold-bg:  rgba(232,196,74,0.1);
+  --green:    #4ade80;
+  --green-bg: rgba(74,222,128,0.1);
+  --red:      #f87171;
+  --red-bg:   rgba(248,113,113,0.1);
+  --amber:    #fbbf24;
+  --amber-bg: rgba(251,191,36,0.1);
+  --blue:     #60a5fa;
+  --blue-bg:  rgba(96,165,250,0.1);
+  --radius:   12px;
+  --radius-sm:8px;
+  --sidebar-w:230px;
+  --topbar-h: 56px;
+  --font:     'Syne', sans-serif;
+  --mono:     'DM Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;overflow:hidden;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+/* ── LAYOUT ── */
+#app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr;height:100vh;}
+
+/* ── TOPBAR ── */
+#topbar{
+  grid-column:1/-1;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:14px;
+  position:sticky;top:0;z-index:100;
+}
+.logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-0.02em;color:var(--text);}
+.logo-mark{
+  width:32px;height:32px;border-radius:8px;
+  background:var(--gold);display:flex;align-items:center;justify-content:center;
+}
+.logo-mark i{color:var(--bg);font-size:17px;}
+.top-search{
+  flex:1;max-width:320px;margin-left:20px;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;display:flex;align-items:center;gap:8px;
+  padding:7px 12px;
+}
+.top-search input{background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13px;width:100%;}
+.top-search input::placeholder{color:var(--text3);}
+.top-search i{color:var(--text3);font-size:15px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.sync-pill{
+  display:flex;align-items:center;gap:6px;
+  background:var(--green-bg);border:1px solid rgba(74,222,128,0.2);
+  padding:4px 12px;border-radius:20px;font-size:12px;color:var(--green);font-family:var(--mono);
+}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.icon-btn{width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all 0.15s;}
+.icon-btn:hover{background:var(--bg4);color:var(--text);}
+.icon-btn i{font-size:17px;}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--bg);cursor:pointer;}
+
+/* ── SIDEBAR ── */
+#sidebar{
+  background:var(--bg2);
+  border-right:1px solid var(--border);
+  padding:16px 0;
+  display:flex;flex-direction:column;gap:1px;
+  overflow-y:auto;
+}
+.nav-label{
+  font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--text3);padding:10px 18px 4px;font-family:var(--mono);
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 18px;font-size:13px;font-weight:500;
+  color:var(--text2);cursor:pointer;
+  border-left:2px solid transparent;
+  transition:all 0.15s;position:relative;
+}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{
+  background:var(--gold-bg);
+  color:var(--gold);
+  border-left-color:var(--gold);
+}
+.nav-item.active i{color:var(--gold);}
+.nav-item i{font-size:18px;color:var(--text3);transition:color 0.15s;}
+.nav-item:hover i{color:var(--text2);}
+.nav-badge{
+  margin-left:auto;font-size:10px;font-weight:600;
+  background:var(--red-bg);color:var(--red);
+  padding:1px 7px;border-radius:10px;font-family:var(--mono);
+}
+.nav-spacer{flex:1;}
+.nav-version{padding:12px 18px;font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+/* ── MAIN ── */
+#main{overflow-y:auto;background:var(--bg);}
+.page{display:none;padding:24px;flex-direction:column;gap:20px;min-height:100%;}
+.page.active{display:flex;}
+
+/* ── PAGE HEADER ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.ph-left h1{font-size:22px;font-weight:700;letter-spacing:-0.02em;}
+.ph-left p{font-size:13px;color:var(--text2);margin-top:3px;}
+.ph-right{display:flex;gap:8px;flex-shrink:0;}
+.btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;font-family:var(--font);}
+.btn-primary{background:var(--gold);color:var(--bg);}
+.btn-primary:hover{background:var(--gold2);}
+.btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border);}
+.btn-secondary:hover{background:var(--bg4);color:var(--text);}
+.btn i{font-size:16px;}
+
+/* ── METRIC CARDS ── */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+.metric{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;position:relative;overflow:hidden;
+}
+.metric::before{
+  content:'';position:absolute;top:0;right:0;
+  width:60px;height:60px;border-radius:50%;
+  background:var(--accent,var(--gold));opacity:0.06;
+  transform:translate(20px,-20px);
+}
+.m-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);margin-bottom:8px;display:flex;align-items:center;gap:5px;}
+.m-label i{font-size:13px;}
+.m-val{font-size:24px;font-weight:700;letter-spacing:-0.03em;color:var(--text);}
+.m-val.gold{color:var(--gold);}
+.m-val.green{color:var(--green);}
+.m-val.red{color:var(--red);}
+.m-val.amber{color:var(--amber);}
+.m-sub{font-size:12px;color:var(--text3);margin-top:4px;font-family:var(--mono);}
+.m-sub.up{color:var(--green);}
+.m-sub.dn{color:var(--red);}
+
+/* ── SECTION ── */
+.section-head{display:flex;align-items:center;justify-content:space-between;}
+.section-head h2{font-size:14px;font-weight:600;letter-spacing:0.02em;}
+.section-head a{font-size:12px;color:var(--text3);cursor:pointer;transition:color 0.15s;}
+.section-head a:hover{color:var(--gold);}
+
+/* ── TABLES ── */
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead tr{border-bottom:1px solid var(--border);}
+thead th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);font-family:var(--mono);}
+tbody tr{border-bottom:1px solid var(--border2);transition:background 0.12s;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--bg3);}
+tbody td{padding:11px 16px;font-size:13px;color:var(--text2);}
+td.primary{color:var(--text);font-weight:500;}
+td.mono{font-family:var(--mono);}
+td.green{color:var(--green);font-family:var(--mono);}
+td.red{color:var(--red);font-family:var(--mono);}
+td.amber{color:var(--amber);font-family:var(--mono);}
+td.gold{color:var(--gold);font-family:var(--mono);}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:var(--mono);}
+.badge.owned{background:var(--green-bg);color:var(--green);}
+.badge.sold{background:var(--bg4);color:var(--text3);}
+.badge.install{background:var(--amber-bg);color:var(--amber);}
+.badge.overdue{background:var(--red-bg);color:var(--red);}
+.badge.due-soon{background:var(--amber-bg);color:var(--amber);}
+.badge.ok{background:var(--green-bg);color:var(--green);}
+
+/* ── CAR CARDS ── */
+.car-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+.car-card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;cursor:pointer;
+  transition:border-color 0.15s,transform 0.15s;
+}
+.car-card:hover{border-color:rgba(232,196,74,0.3);transform:translateY(-1px);}
+.car-card-top{
+  background:var(--bg3);padding:16px;
+  display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border);
+}
+.car-icon{
+  width:46px;height:46px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+}
+.car-info{flex:1;}
+.car-info h3{font-size:14px;font-weight:700;}
+.car-info p{font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--mono);}
+.car-card-stats{padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cs{display:flex;flex-direction:column;gap:2px;}
+.cs-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);font-family:var(--mono);}
+.cs-val{font-size:14px;font-weight:600;}
+.car-card-actions{
+  padding:10px 16px;border-top:1px solid var(--border);
+  display:flex;gap:6px;
+}
+.action-chip{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:6px;border-radius:6px;background:var(--bg4);
+  color:var(--text3);font-size:11px;font-weight:500;cursor:pointer;
+  border:none;font-family:var(--font);transition:all 0.15s;
+}
+.action-chip:hover{background:var(--gold-bg);color:var(--gold);}
+.action-chip i{font-size:13px;}
+
+/* ── FUEL PRICES ── */
+.fuel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+.fuel-card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;
+}
+.fuel-card-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.fuel-card-head i{font-size:20px;color:var(--gold);}
+.fuel-card-head span{font-size:13px;font-weight:600;}
+.fuel-price{font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.03em;color:var(--text);}
+.fuel-price span{font-size:14px;font-weight:400;color:var(--text3);}
+.fuel-change{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;font-family:var(--mono);padding:2px 8px;border-radius:20px;}
+.fuel-change.up{background:var(--red-bg);color:var(--red);}
+.fuel-change.dn{background:var(--green-bg);color:var(--green);}
+.fuel-change.nc{background:var(--bg4);color:var(--text3);}
+
+/* ── MINI CHART ── */
+.mini-chart{height:50px;display:flex;align-items:flex-end;gap:2px;margin-top:10px;}
+.mc-bar{flex:1;border-radius:2px 2px 0 0;transition:height 0.3s;background:var(--bg4);}
+.mc-bar.latest{background:var(--gold);}
+
+/* ── SERVICE LIST ── */
+.service-list{display:flex;flex-direction:column;gap:8px;}
+.service-item{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  display:flex;align-items:center;gap:12px;
+}
+.service-icon{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.service-icon.red{background:var(--red-bg);color:var(--red);}
+.service-icon.amber{background:var(--amber-bg);color:var(--amber);}
+.service-icon.green{background:var(--green-bg);color:var(--green);}
+.service-main{flex:1;}
+.service-main h4{font-size:13px;font-weight:600;}
+.service-main p{font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--mono);}
+.service-due{text-align:right;}
+.service-due .due-label{font-size:11px;color:var(--text3);font-family:var(--mono);}
+.service-due .due-val{font-size:13px;font-weight:600;font-family:var(--mono);}
+
+/* ── MODAL ── */
+#modal-overlay{
+  display:none;position:fixed;inset:0;z-index:999;
+  background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:20px;
+}
+#modal-overlay.open{display:flex;}
+.modal{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:16px;width:100%;max-width:520px;max-height:90vh;
+  overflow-y:auto;
+}
+.modal-head{
+  padding:20px 24px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.modal-head h2{font-size:16px;font-weight:700;}
+.modal-close{width:30px;height:30px;border-radius:6px;background:var(--bg3);border:none;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.modal-close i{font-size:16px;}
+.modal-body{padding:24px;}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+
+/* ── FORM ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-grid.cols-1{grid-template-columns:1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group.span-2{grid-column:1/-1;}
+label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;font-family:var(--mono);}
+input,select,textarea{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;padding:9px 12px;
+  color:var(--text);font-family:var(--font);font-size:13px;
+  outline:none;transition:border-color 0.15s;width:100%;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);}
+select option{background:var(--bg3);}
+.form-divider{grid-column:1/-1;height:1px;background:var(--border);margin:4px 0;}
+.form-section-title{grid-column:1/-1;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);}
+
+/* ── P&L ── */
+.pl-summary{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
+}
+.pl-item{display:flex;flex-direction:column;gap:4px;}
+.pl-item-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);}
+.pl-item-val{font-size:22px;font-weight:700;font-family:var(--mono);letter-spacing:-0.02em;}
+
+/* ── EMPTY STATE ── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;gap:12px;color:var(--text3);text-align:center;
+}
+.empty-state i{font-size:48px;color:var(--bg4);}
+.empty-state h3{font-size:15px;font-weight:600;color:var(--text2);}
+.empty-state p{font-size:13px;max-width:280px;}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:24px;right:24px;z-index:9999;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:10px;padding:12px 18px;
+  font-size:13px;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+  transform:translateY(80px);opacity:0;
+  transition:all 0.25s;pointer-events:none;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast i{font-size:16px;}
+#toast.success i{color:var(--green);}
+#toast.error i{color:var(--red);}
+
+/* ── FIREBASE SETUP BANNER ── */
+#firebase-banner{
+  display:flex;align-items:center;gap:12px;
+  background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);
+  border-radius:var(--radius);padding:14px 16px;
+  font-size:13px;color:var(--amber);
+}
+#firebase-banner i{font-size:18px;flex-shrink:0;}
+#firebase-banner strong{font-weight:700;}
+#firebase-banner a{color:var(--gold);text-decoration:underline;cursor:pointer;}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:3px;}
+.tab-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text3);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);transition:all 0.15s;}
+.tab-btn.active{background:var(--gold);color:var(--bg);font-weight:700;}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  #sidebar{display:none;}
+  #app{grid-template-columns:1fr;}
+  .car-cards{grid-template-columns:1fr;}
+  .metrics{grid-template-columns:1fr 1fr;}
+  .form-grid{grid-template-columns:1fr;}
+  .form-group.span-2{grid-column:1;}
+  .pl-summary{grid-template-columns:1fr;}
+  #mobile-nav{display:flex;}
+}
+#mobile-nav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;z-index:500;
+  background:var(--bg2);border-top:1px solid var(--border);
+  padding:8px 0 max(8px,env(safe-area-inset-bottom));
+}
+.mob-nav-items{display:flex;justify-content:space-around;}
+.mob-nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 12px;cursor:pointer;color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;}
+.mob-nav-item.active{color:var(--gold);}
+.mob-nav-item i{font-size:22px;}
+@media(max-width:768px){
+  .page{padding:16px;padding-bottom:80px;}
+}
+
+/* Fuel log chart */
+.fuel-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.fuel-chart{height:120px;display:flex;align-items:flex-end;gap:6px;margin-top:8px;}
+.fc-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;}
+.fc-bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;}
+.fc-bar{width:100%;border-radius:3px 3px 0 0;background:var(--bg4);transition:height 0.4s;}
+.fc-bar.latest{background:var(--gold);}
+.fc-label{font-size:9px;color:var(--text3);font-family:var(--mono);}
+</style>
+</head>
+<body>
+
+<!-- FIREBASE CONFIG SETUP - User fills this in -->
+<script>
+window.FIREBASE_CONFIG = {
+  // ⚠️  PASTE YOUR FIREBASE CONFIG HERE
+  // Go to: Firebase Console → Project Settings → Your Apps → SDK setup
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+</script>
+
+<div id="app">
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="logo">
+      <div class="logo-mark"><i class="ti ti-car"></i></div>
+      FleetLedger
+    </div>
+    <div class="top-search">
+      <i class="ti ti-search"></i>
+      <input type="text" placeholder="Search cars, logs…"/>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-pill" id="sync-pill">
+        <div class="sync-dot"></div>
+        <span id="sync-label">Connecting…</span>
+      </div>
+      <div class="icon-btn" onclick="showModal('add-car-modal')"><i class="ti ti-plus"></i></div>
+      <div class="icon-btn" id="notif-btn"><i class="ti ti-bell"></i></div>
+      <div class="avatar">AK</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <span class="nav-label">Overview</span>
+    <div class="nav-item active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+    <span class="nav-label">Fleet</span>
+    <div class="nav-item" data-page="cars"><i class="ti ti-car"></i>My Cars</div>
+    <div class="nav-item" data-page="fuel-log"><i class="ti ti-droplet"></i>Fuel Log</div>
+    <div class="nav-item" data-page="service"><i class="ti ti-tool"></i>Service Log <span class="nav-badge" id="service-badge" style="display:none">0</span></div>
+    <span class="nav-label">Finance</span>
+    <div class="nav-item" data-page="purchases"><i class="ti ti-credit-card"></i>Purchases</div>
+    <div class="nav-item" data-page="pl"><i class="ti ti-chart-bar"></i>Sales & P&L</div>
+    <div class="nav-item" data-page="installments"><i class="ti ti-cash"></i>Installments</div>
+    <span class="nav-label">Market</span>
+    <div class="nav-item" data-page="fuel-prices"><i class="ti ti-gas-station"></i>Fuel Prices</div>
+    <div class="nav-spacer"></div>
+    <div class="nav-item" data-page="settings"><i class="ti ti-settings"></i>Settings</div>
+    <div class="nav-version">FleetLedger v1.0</div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div id="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="ph">
+        <div class="ph-left">
+          <h1>Dashboard</h1>
+          <p id="dash-sub">Loading fleet data…</p>
+        </div>
+        <div class="ph-right">
+          <button class="btn btn-primary" onclick="showModal('add-car-modal')"><i class="ti ti-plus"></i>Add Car</button>
+        </div>
+      </div>
+
+      <div id="firebase-setup-banner" class="firebase-banner" style="display:none">
+        <div id="firebase-banner" >
+          <i class="ti ti-alert-triangle"></i>
+          <div><strong>Firebase not configured.</strong> Open <code>index.html</code> and paste your Firebase config at the top to enable real-time sync. <a onclick="showPage('settings')">Go to Settings →</a></div>
+        </div>
+      </div>
+
+      <div class="metrics" id="dash-metrics">
+        <div class="metric" style="--accent:var(--blue)">
+          <div class="m-label"><i class="ti ti-car"></i>Total Cars</div>
+          <div class="m-val" id="dm-cars">—</div>
+          <div class="m-sub" id="dm-cars-sub">loading…</div>
+        </div>
+        <div class="metric" style="--accent:var(--gold)">
+          <div class="m-label"><i class="ti ti-droplet"></i>Fleet Avg</div>
+          <div class="m-val gold" id="dm-avg">—</div>
+          <div class="m-sub" id="dm-avg-sub">km per litre</div>
+        </div>
+        <div class="metric" style="--accent:var(--green)">
+          <div class="m-label"><i class="ti ti-trending-up"></i>Total P&L</div>
+          <div class="m-val" id="dm-pl">—</div>
+          <div class="m-sub" id="dm-pl-sub">on sold cars</div>
+        </div>
+        <div class="metric" style="--accent:var(--red)">
+          <div class="m-label"><i class="ti ti-alert-triangle"></i>Service Alerts</div>
+          <div class="m-val red" id="dm-alerts">—</div>
+          <div class="m-sub" id="dm-alerts-sub">need attention</div>
+        </div>
+        <div class="metric" style="--accent:var(--amber)">
+          <div class="m-label"><i class="ti ti-gas-station"></i>Petrol RON-92</div>
+          <div class="m-val amber" id="dm-petrol">—</div>
+          <div class="m-sub" id="dm-petrol-sub">per litre</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-head">
+          <h2>My Fleet</h2>
+          <a onclick="showPage('cars')">View all →</a>
+        </div>
+        <div class="car-cards" id="dash-cars" style="margin-top:12px">
+          <div class="empty-state"><i class="ti ti-car-off"></i><h3>No cars yet</h3><p>Add your first car to get started.</p></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-head"><h2>Upcoming Services</h2><a onclick="showPage('service')">View all →</a></div>
+        <div class="service-list" id="dash-services" style="margin-top:12px">
+          <div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MY CARS ── -->
+    <div class="page" id="page-cars">
+      <div class="ph">
+        <div class="ph-left"><h1>My Cars</h1><p id="cars-sub">—</p></div>
+        <div class="ph-right">
+          <button class="btn btn-primary" onclick="showModal('add-car-modal')"><i class="ti ti-plus"></i>Add Car</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="filterCars('all',this)">All</button>
+        <button class="tab-btn" onclick="filterCars('owned',this)">Owned</button>
+        <button class="tab-btn" onclick="filterCars('sold',this)">Sold</button>
+        <button class="tab-btn" onclick="filterCars('installment',this)">On Installment</button>
+      </div>
+      <div class="car-cards" id="cars-list">
+        <div class="empty-state"><i class="ti ti-car-off"></i><h3>No cars yet</h3><p>Tap + Add Car to begin.</p></div>
+      </div>
+    </div>
+
+    <!-- ── FUEL LOG ── -->
+    <div class="page" id="page-fuel-log">
+      <div class="ph">
+        <div class="ph-left"><h1>Fuel Log</h1><p>Fill-up history &amp; averages</p></div>
+        <div class="ph-right">
+          <button class="btn btn-primary" onclick="showModal('add-fuel-modal')"><i class="ti ti-plus"></i>Log Fill-up</button>
+        </div>
+      </div>
+      <div class="fuel-chart-wrap">
+        <div class="section-head"><h2>Fuel Economy Trend</h2></div>
+        <div class="fuel-chart" id="fuel-chart">
+          <div class="empty-state" style="padding:20px;flex:1"><i class="ti ti-chart-line"></i><h3>No data yet</h3></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Car</th><th>Litres</th><th>Cost (₨)</th><th>Odometer</th><th>Avg km/l</th>
+          </tr></thead>
+          <tbody id="fuel-log-tbody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SERVICE LOG ── -->
+    <div class="page" id="page-service">
+      <div class="ph">
+        <div class="ph-left"><h1>Service Log</h1><p>Maintenance records &amp; reminders</p></div>
+        <div class="ph-right">
+          <button class="btn btn-primary" onclick="showModal('add-service-modal')"><i class="ti ti-plus"></i>Log Service</button>
+        </div>
+      </div>
+      <div class="section-head"><h2>Alerts</h2></div>
+      <div class="service-list" id="service-alerts-list" style="margin-top:8px">
+        <div class="empty-state" style="padding:30px"><i class="ti ti-circle-check"></i><h3>All clear!</h3><p>No service alerts.</p></div>
+      </div>
+      <div class="section-head" style="margin-top:8px"><h2>Service History</h2></div>
+      <div class="table-wrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Date</th><th>Car</th><th>Service Type</th><th>Cost (₨)</th><th>Odometer</th><th>Next Due</th></tr></thead>
+          <tbody id="service-tbody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PURCHASES ── -->
+    <div class="page" id="page-purchases">
+      <div class="ph">
+        <div class="ph-left"><h1>Purchases</h1><p>Car acquisition records</p></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Car</th><th>Purchase Date</th><th>Price (₨)</th><th>Payment</th><th>Down Payment</th><th>Loan Amount</th></tr></thead>
+          <tbody id="purchases-tbody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-receipt"></i><h3>No purchases recorded</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SALES & P&L ── -->
+    <div class="page" id="page-pl">
+      <div class="ph">
+        <div class="ph-left"><h1>Sales &amp; P&amp;L</h1><p>Profit &amp; loss on sold cars</p></div>
+      </div>
+      <div class="pl-summary" id="pl-summary">
+        <div class="pl-item"><div class="pl-item-label">Total Invested</div><div class="pl-item-val" id="pl-invested" style="color:var(--text)">₨ 0</div></div>
+        <div class="pl-item"><div class="pl-item-label">Total Sold For</div><div class="pl-item-val" id="pl-sold" style="color:var(--blue)">₨ 0</div></div>
+        <div class="pl-item"><div class="pl-item-label">Net Profit / Loss</div><div class="pl-item-val" id="pl-net" style="color:var(--green)">₨ 0</div></div>
+      </div>
+      <div class="table-wrap" style="margin-top:4px">
+        <table>
+          <thead><tr><th>Car</th><th>Bought At</th><th>Sold At</th><th>Sell Date</th><th>P&L (₨)</th><th>Return %</th></tr></thead>
+          <tbody id="pl-tbody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-chart-bar"></i><h3>No sold cars yet</h3><p>Mark a car as sold to see P&amp;L.</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── INSTALLMENTS ── -->
+    <div class="page" id="page-installments">
+      <div class="ph">
+        <div class="ph-left"><h1>Installments</h1><p>Active loan tracker</p></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Car</th><th>Total Loan</th><th>Monthly EMI</th><th>Paid So Far</th><th>Remaining</th><th>Months Left</th></tr></thead>
+          <tbody id="installments-tbody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-credit-card"></i><h3>No active installments</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── FUEL PRICES ── -->
+    <div class="page" id="page-fuel-prices">
+      <div class="ph">
+        <div class="ph-left"><h1>Fuel Prices</h1><p id="fuel-price-date">Pakistan market rates</p></div>
+        <div class="ph-right">
+          <button class="btn btn-primary" onclick="showModal('add-fuel-price-modal')"><i class="ti ti-plus"></i>Update Prices</button>
+        </div>
+      </div>
+      <div class="fuel-grid" id="fuel-price-cards">
+        <div class="empty-state" style="padding:30px"><i class="ti ti-gas-station"></i><h3>No price data</h3><p>Add current fuel prices.</p></div>
+      </div>
+      <div class="section-head"><h2>Price History</h2></div>
+      <div class="table-wrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Date</th><th>RON-92 (₨)</th><th>RON-95 (₨)</th><th>HSD (₨)</th><th>CNG (₨)</th></tr></thead>
+          <tbody id="fuel-price-tbody">
+            <tr><td colspan="5"><div class="empty-state" style="padding:30px"><i class="ti ti-history"></i><h3>No history yet</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="page" id="page-settings">
+      <div class="ph"><div class="ph-left"><h1>Settings</h1><p>Firebase config &amp; preferences</p></div></div>
+      <div class="table-wrap" style="padding:24px">
+        <h2 style="font-size:15px;margin-bottom:16px;">🔥 Firebase Configuration</h2>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">
+          To enable real-time sync across all devices, paste your Firebase config below.<br>
+          Get it from: <strong>Firebase Console → Project Settings → Your Apps → SDK setup &amp; configuration</strong>
+        </p>
+        <div class="form-grid cols-1">
+          <div class="form-group"><label>API Key</label><input id="cfg-apiKey" placeholder="AIzaSy…"/></div>
+          <div class="form-group"><label>Auth Domain</label><input id="cfg-authDomain" placeholder="yourapp.firebaseapp.com"/></div>
+          <div class="form-group"><label>Project ID</label><input id="cfg-projectId" placeholder="your-project-id"/></div>
+          <div class="form-group"><label>Storage Bucket</label><input id="cfg-storageBucket" placeholder="your-project.appspot.com"/></div>
+          <div class="form-group"><label>Messaging Sender ID</label><input id="cfg-messagingSenderId" placeholder="123456789"/></div>
+          <div class="form-group"><label>App ID</label><input id="cfg-appId" placeholder="1:123:web:abc…"/></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:16px" onclick="saveFirebaseConfig()"><i class="ti ti-device-floppy"></i>Save &amp; Reconnect</button>
+        <p style="font-size:12px;color:var(--text3);margin-top:10px;font-family:var(--mono)">Config is saved in localStorage on this device. Also update FIREBASE_CONFIG in index.html for permanent setup.</p>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MOBILE NAV -->
+<div id="mobile-nav">
+  <div class="mob-nav-items">
+    <div class="mob-nav-item active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i>Home</div>
+    <div class="mob-nav-item" data-page="cars"><i class="ti ti-car"></i>Cars</div>
+    <div class="mob-nav-item" data-page="fuel-log"><i class="ti ti-droplet"></i>Fuel</div>
+    <div class="mob-nav-item" data-page="service"><i class="ti ti-tool"></i>Service</div>
+    <div class="mob-nav-item" data-page="fuel-prices"><i class="ti ti-gas-station"></i>Prices</div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"><i class="ti ti-check"></i><span id="toast-msg">Saved!</span></div>
+
+<!-- ═══════════════════════════════════════════════════════════ MODALS -->
+
+<!-- ADD CAR -->
+<div id="modal-overlay">
+  <div class="modal" id="active-modal">
+    <!-- Injected dynamically -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ JS -->
+<script type="module">
+// ── Firebase SDK ──────────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, getDocs, onSnapshot,
+  doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── State ─────────────────────────────────────────────────────────
+let db = null;
+let cars = [], fuelLogs = [], serviceLogs = [], fuelPrices = [];
+let carsFilter = 'all';
+
+// ── Firebase Init ─────────────────────────────────────────────────
+function initFirebase() {
+  // Check localStorage override first
+  const saved = localStorage.getItem('fl_firebase_config');
+  const cfg = saved ? JSON.parse(saved) : window.FIREBASE_CONFIG;
+
+  if (!cfg.apiKey) {
+    document.getElementById('firebase-setup-banner').style.display = 'block';
+    setSyncStatus(false);
+    loadLocalData();
+    return;
+  }
+  try {
+    const app = initializeApp(cfg);
+    db = getFirestore(app);
+    setSyncStatus(true);
+    attachListeners();
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    setSyncStatus(false);
+    showToast('Firebase config error. Check Settings.', 'error');
+    loadLocalData();
+  }
+}
+
+function setSyncStatus(online) {
+  const pill = document.getElementById('sync-pill');
+  const label = document.getElementById('sync-label');
+  const dot = pill.querySelector('.sync-dot');
+  if (online) {
+    pill.style.background = 'var(--green-bg)';
+    pill.style.borderColor = 'rgba(74,222,128,0.2)';
+    pill.style.color = 'var(--green)';
+    dot.style.background = 'var(--green)';
+    label.textContent = 'Live sync';
+  } else {
+    pill.style.background = 'var(--amber-bg)';
+    pill.style.borderColor = 'rgba(251,191,36,0.2)';
+    pill.style.color = 'var(--amber)';
+    dot.style.background = 'var(--amber)';
+    label.textContent = 'Offline';
+  }
+}
+
+// ── Real-time listeners ───────────────────────────────────────────
+function attachListeners() {
+  onSnapshot(query(collection(db,'cars'), orderBy('createdAt','desc')), snap => {
+    cars = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderAll();
+  });
+  onSnapshot(query(collection(db,'fuelLogs'), orderBy('date','desc')), snap => {
+    fuelLogs = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderFuelLog();
+    renderDashboard();
+  });
+  onSnapshot(query(collection(db,'serviceLogs'), orderBy('date','desc')), snap => {
+    serviceLogs = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderServiceLog();
+    renderDashboard();
+  });
+  onSnapshot(query(collection(db,'fuelPrices'), orderBy('date','desc')), snap => {
+    fuelPrices = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderFuelPrices();
+    renderDashboard();
+  });
+}
+
+// ── Local fallback ────────────────────────────────────────────────
+function loadLocalData() {
+  cars = JSON.parse(localStorage.getItem('fl_cars')||'[]');
+  fuelLogs = JSON.parse(localStorage.getItem('fl_fuel')||'[]');
+  serviceLogs = JSON.parse(localStorage.getItem('fl_service')||'[]');
+  fuelPrices = JSON.parse(localStorage.getItem('fl_prices')||'[]');
+  renderAll();
+}
+function saveLocal() {
+  localStorage.setItem('fl_cars', JSON.stringify(cars));
+  localStorage.setItem('fl_fuel', JSON.stringify(fuelLogs));
+  localStorage.setItem('fl_service', JSON.stringify(serviceLogs));
+  localStorage.setItem('fl_prices', JSON.stringify(fuelPrices));
+}
+
+// ── CRUD helpers ──────────────────────────────────────────────────
+async function addDoc_(col, data) {
+  if (db) {
+    await addDoc(collection(db, col), {...data, createdAt: serverTimestamp()});
+  } else {
+    const item = {...data, id: Date.now().toString(), createdAt: new Date().toISOString()};
+    if(col==='cars') cars.unshift(item);
+    else if(col==='fuelLogs') fuelLogs.unshift(item);
+    else if(col==='serviceLogs') serviceLogs.unshift(item);
+    else if(col==='fuelPrices') fuelPrices.unshift(item);
+    saveLocal(); renderAll();
+  }
+}
+async function updateDoc_(col, id, data) {
+  if (db) {
+    await updateDoc(doc(db, col, id), data);
+  } else {
+    const arr = col==='cars'?cars:col==='fuelLogs'?fuelLogs:col==='serviceLogs'?serviceLogs:fuelPrices;
+    const i = arr.findIndex(x=>x.id===id);
+    if(i>=0) Object.assign(arr[i], data);
+    saveLocal(); renderAll();
+  }
+}
+
+// ── RENDER DASHBOARD ──────────────────────────────────────────────
+function renderDashboard() {
+  const owned = cars.filter(c=>c.status==='owned').length;
+  const sold  = cars.filter(c=>c.status==='sold').length;
+  document.getElementById('dm-cars').textContent = cars.length;
+  document.getElementById('dm-cars-sub').textContent = `${owned} owned · ${sold} sold`;
+  document.getElementById('dash-sub').textContent = `${cars.length} vehicle${cars.length!==1?'s':''} tracked`;
+
+  // Fleet avg km/l
+  if (fuelLogs.length > 0) {
+    const avgs = fuelLogs.filter(f=>f.kmpl>0).map(f=>f.kmpl);
+    const avg = avgs.length ? (avgs.reduce((a,b)=>a+b,0)/avgs.length).toFixed(1) : '—';
+    document.getElementById('dm-avg').textContent = avg === '—' ? '—' : avg + ' km/l';
+  } else {
+    document.getElementById('dm-avg').textContent = '—';
+  }
+
+  // P&L
+  let totalPL = 0;
+  cars.filter(c=>c.status==='sold'&&c.soldAt&&c.boughtAt).forEach(c=>{
+    totalPL += (parseFloat(c.soldAt)||0) - (parseFloat(c.boughtAt)||0);
+  });
+  const plEl = document.getElementById('dm-pl');
+  plEl.textContent = totalPL === 0 ? '₨ 0' : (totalPL>0?'+':'')+fmt(totalPL);
+  plEl.className = 'm-val ' + (totalPL>0?'green':totalPL<0?'red':'');
+
+  // Alerts
+  const alerts = serviceLogs.filter(s=>s.status==='overdue').length;
+  document.getElementById('dm-alerts').textContent = alerts;
+  const badge = document.getElementById('service-badge');
+  if (alerts > 0) { badge.style.display='inline'; badge.textContent=alerts; }
+  else badge.style.display='none';
+
+  // Latest fuel price
+  if (fuelPrices.length) {
+    const latest = fuelPrices[0];
+    document.getElementById('dm-petrol').textContent = latest.ron92 ? '₨ '+latest.ron92 : '—';
+    document.getElementById('dm-petrol-sub').textContent = 'per litre · '+latest.date;
+  }
+
+  // Dash cars
+  renderCarCards('dash-cars', cars.slice(0,3));
+
+  // Dash services
+  const alerts2 = serviceLogs.filter(s=>s.status==='overdue'||s.status==='due-soon').slice(0,4);
+  renderServiceAlerts('dash-services', alerts2);
+}
+
+// ── RENDER CARS ───────────────────────────────────────────────────
+function renderAll() {
+  renderDashboard();
+  renderCarList();
+  renderFuelLog();
+  renderServiceLog();
+  renderPurchases();
+  renderPL();
+  renderInstallments();
+  renderFuelPrices();
+}
+
+function renderCarList() {
+  let filtered = cars;
+  if (carsFilter==='owned') filtered = cars.filter(c=>c.status==='owned');
+  else if (carsFilter==='sold') filtered = cars.filter(c=>c.status==='sold');
+  else if (carsFilter==='installment') filtered = cars.filter(c=>c.hasInstallment);
+  document.getElementById('cars-sub').textContent = `${filtered.length} of ${cars.length} shown`;
+  renderCarCards('cars-list', filtered);
+}
+
+const CAR_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899'];
+function carColor(i) { return CAR_COLORS[i%CAR_COLORS.length]; }
+
+function renderCarCards(containerId, list) {
+  const el = document.getElementById(containerId);
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state"><i class="ti ti-car-off"></i><h3>No cars</h3><p>Add your first car to get started.</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map((c,i)=>{
+    const idx = cars.indexOf(c) >= 0 ? cars.indexOf(c) : i;
+    const col = carColor(idx);
+    const logs = fuelLogs.filter(f=>f.carId===c.id);
+    const avgs = logs.filter(f=>f.kmpl>0).map(f=>f.kmpl);
+    const avg = avgs.length ? (avgs.reduce((a,b)=>a+b,0)/avgs.length).toFixed(1) : '—';
+    const lastSvc = serviceLogs.filter(s=>s.carId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+    const pl = c.status==='sold'&&c.soldAt&&c.boughtAt ? (parseFloat(c.soldAt)-parseFloat(c.boughtAt)) : null;
+
+    return `<div class="car-card" onclick="openCarDetail('${c.id}')">
+      <div class="car-card-top">
+        <div class="car-icon" style="background:${col}22;color:${col}"><i class="ti ti-car"></i></div>
+        <div class="car-info">
+          <h3>${c.make||''} ${c.model||''}</h3>
+          <p>${c.year||''} · ${c.reg||'No reg'}</p>
+        </div>
+        <span class="badge ${c.status||'owned'}">${c.status||'Owned'}</span>
+      </div>
+      <div class="car-card-stats">
+        <div class="cs"><div class="cs-label">Fuel avg</div><div class="cs-val" style="color:${col}">${avg==='—'?'—':avg+' km/l'}</div></div>
+        <div class="cs"><div class="cs-label">Bought at</div><div class="cs-val">${c.boughtAt ? '₨ '+fmtL(c.boughtAt) : '—'}</div></div>
+        ${c.status==='sold'&&pl!==null
+          ? `<div class="cs"><div class="cs-label">Sold at</div><div class="cs-val">${'₨ '+fmtL(c.soldAt)}</div></div>
+             <div class="cs"><div class="cs-label">Profit/Loss</div><div class="cs-val" style="color:${pl>=0?'var(--green)':'var(--red)'}">${pl>=0?'+':''}${fmt(pl)}</div></div>`
+          : `<div class="cs"><div class="cs-label">Last service</div><div class="cs-val">${lastSvc?lastSvc.date:'—'}</div></div>
+             <div class="cs"><div class="cs-label">Odometer</div><div class="cs-val">${c.odometer?fmtKm(c.odometer)+' km':'—'}</div></div>`
+        }
+      </div>
+      ${c.status!=='sold'?`
+      <div class="car-card-actions">
+        <button class="action-chip" onclick="event.stopPropagation();logFuelFor('${c.id}')"><i class="ti ti-droplet"></i>Fill-up</button>
+        <button class="action-chip" onclick="event.stopPropagation();logServiceFor('${c.id}')"><i class="ti ti-tool"></i>Service</button>
+        <button class="action-chip" onclick="event.stopPropagation();markSold('${c.id}')"><i class="ti ti-tag"></i>Sell</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER FUEL LOG ───────────────────────────────────────────────
+function renderFuelLog() {
+  const tbody = document.getElementById('fuel-log-tbody');
+  if (!fuelLogs.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = fuelLogs.map(f=>{
+    const car = cars.find(c=>c.id===f.carId);
+    return `<tr>
+      <td class="mono">${f.date}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td class="mono">${f.litres} L</td>
+      <td class="mono gold">₨ ${fmt(f.cost)}</td>
+      <td class="mono">${f.odometer?fmtKm(f.odometer)+' km':'—'}</td>
+      <td class="${f.kmpl>0?(f.kmpl>14?'green':f.kmpl>10?'amber':'red'):''} mono">${f.kmpl>0?f.kmpl.toFixed(1)+' km/l':'—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Chart
+  const chart = document.getElementById('fuel-chart');
+  const recent = fuelLogs.filter(f=>f.kmpl>0).slice(0,12).reverse();
+  if (!recent.length) return;
+  const max = Math.max(...recent.map(f=>f.kmpl));
+  chart.innerHTML = recent.map((f,i)=>{
+    const h = ((f.kmpl/max)*100).toFixed(0);
+    const car = cars.find(c=>c.id===f.carId);
+    return `<div class="fc-col">
+      <div class="fc-bar-wrap"><div class="fc-bar ${i===recent.length-1?'latest':''}" style="height:${h}%"></div></div>
+      <div class="fc-label">${f.kmpl.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER SERVICE ────────────────────────────────────────────────
+function renderServiceLog() {
+  const tbody = document.getElementById('service-tbody');
+  const alertsList = document.getElementById('service-alerts-list');
+  const dashSvc = document.getElementById('dash-services');
+
+  if (!serviceLogs.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;
+    alertsList.innerHTML = `<div class="empty-state" style="padding:30px"><i class="ti ti-circle-check"></i><h3>All clear!</h3></div>`;
+    return;
+  }
+
+  tbody.innerHTML = serviceLogs.map(s=>{
+    const car = cars.find(c=>c.id===s.carId);
+    return `<tr>
+      <td class="mono">${s.date}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td>${s.type}</td>
+      <td class="mono gold">₨ ${fmt(s.cost)}</td>
+      <td class="mono">${s.odometer?fmtKm(s.odometer)+' km':'—'}</td>
+      <td class="${s.status==='overdue'?'red':s.status==='due-soon'?'amber':'green'} mono">${s.nextDue||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  const alerts = serviceLogs.filter(s=>s.status==='overdue'||s.status==='due-soon');
+  renderServiceAlerts('service-alerts-list', alerts);
+  renderServiceAlerts('dash-services', alerts.slice(0,4));
+}
+
+function renderServiceAlerts(containerId, list) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:30px"><i class="ti ti-circle-check"></i><h3>All clear!</h3></div>`;
+    return;
+  }
+  el.innerHTML = list.map(s=>{
+    const car = cars.find(c=>c.id===s.carId);
+    const cls = s.status==='overdue'?'red':'amber';
+    return `<div class="service-item">
+      <div class="service-icon ${cls}"><i class="ti ti-tool"></i></div>
+      <div class="service-main">
+        <h4>${car?`${car.make} ${car.model}`:'Unknown'}</h4>
+        <p>${s.type}</p>
+      </div>
+      <div class="service-due">
+        <div class="due-label">Due</div>
+        <div class="due-val" style="color:var(--${cls})">${s.nextDue||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER PURCHASES ──────────────────────────────────────────────
+function renderPurchases() {
+  const tbody = document.getElementById('purchases-tbody');
+  const owned = cars.filter(c=>c.boughtAt);
+  if (!owned.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-receipt"></i><h3>No purchases recorded</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = owned.map(c=>`<tr>
+    <td class="primary">${c.make} ${c.model} ${c.year||''}</td>
+    <td class="mono">${c.purchaseDate||'—'}</td>
+    <td class="mono gold">₨ ${fmtL(c.boughtAt)}</td>
+    <td>${c.hasInstallment?'<span class="badge install">Installment</span>':'<span class="badge ok">Cash</span>'}</td>
+    <td class="mono">${c.downPayment?'₨ '+fmtL(c.downPayment):'—'}</td>
+    <td class="mono">${c.loanAmount?'₨ '+fmtL(c.loanAmount):'—'}</td>
+  </tr>`).join('');
+}
+
+// ── RENDER P&L ────────────────────────────────────────────────────
+function renderPL() {
+  const tbody = document.getElementById('pl-tbody');
+  const sold = cars.filter(c=>c.status==='sold');
+  let totalIn=0, totalOut=0;
+  sold.forEach(c=>{totalIn+=parseFloat(c.boughtAt||0);totalOut+=parseFloat(c.soldAt||0);});
+  const net = totalOut - totalIn;
+  document.getElementById('pl-invested').textContent = '₨ '+fmtL(totalIn);
+  document.getElementById('pl-sold').textContent = '₨ '+fmtL(totalOut);
+  const netEl = document.getElementById('pl-net');
+  netEl.textContent = (net>=0?'+':'')+'₨ '+fmtL(Math.abs(net));
+  netEl.style.color = net>=0?'var(--green)':'var(--red)';
+
+  if (!sold.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-chart-bar"></i><h3>No sold cars</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sold.map(c=>{
+    const pl = (parseFloat(c.soldAt||0))-(parseFloat(c.boughtAt||0));
+    const pct = c.boughtAt ? ((pl/parseFloat(c.boughtAt))*100).toFixed(1) : '—';
+    return `<tr>
+      <td class="primary">${c.make} ${c.model} ${c.year||''}</td>
+      <td class="mono">₨ ${fmtL(c.boughtAt)}</td>
+      <td class="mono">₨ ${fmtL(c.soldAt)}</td>
+      <td class="mono">${c.sellDate||'—'}</td>
+      <td class="${pl>=0?'green':'red'}">${pl>=0?'+':''}₨ ${fmtL(Math.abs(pl))}</td>
+      <td class="${pl>=0?'green':'red'}">${pl>=0?'+':''}${pct}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── RENDER INSTALLMENTS ───────────────────────────────────────────
+function renderInstallments() {
+  const tbody = document.getElementById('installments-tbody');
+  const inst = cars.filter(c=>c.hasInstallment&&c.status!=='sold');
+  if (!inst.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:30px"><i class="ti ti-credit-card"></i><h3>No active installments</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = inst.map(c=>{
+    const paid = (parseFloat(c.loanAmount||0))-(parseFloat(c.monthlyEMI||0)*parseInt(c.monthsLeft||0));
+    return `<tr>
+      <td class="primary">${c.make} ${c.model} ${c.year||''}</td>
+      <td class="mono">₨ ${fmtL(c.loanAmount)}</td>
+      <td class="mono amber">₨ ${fmt(c.monthlyEMI)}/mo</td>
+      <td class="mono green">₨ ${fmtL(Math.max(0,paid))}</td>
+      <td class="mono">₨ ${fmtL(parseFloat(c.monthlyEMI||0)*parseInt(c.monthsLeft||0))}</td>
+      <td class="mono amber">${c.monthsLeft||'—'} months</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── RENDER FUEL PRICES ────────────────────────────────────────────
+function renderFuelPrices() {
+  const tbody = document.getElementById('fuel-price-tbody');
+  const cards = document.getElementById('fuel-price-cards');
+
+  if (!fuelPrices.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state" style="padding:30px"><i class="ti ti-history"></i><h3>No price history</h3></div></td></tr>`;
+    cards.innerHTML = `<div class="empty-state" style="padding:30px"><i class="ti ti-gas-station"></i><h3>No prices added</h3></div>`;
+    return;
+  }
+
+  const latest = fuelPrices[0];
+  const prev   = fuelPrices[1]||{};
+  document.getElementById('fuel-price-date').textContent = 'Last updated: '+latest.date;
+
+  const types = [
+    {key:'ron92',label:'Petrol RON-92',icon:'ti-gas-station'},
+    {key:'ron95',label:'Petrol RON-95',icon:'ti-gas-station'},
+    {key:'hsd',  label:'Diesel (HSD)', icon:'ti-droplet'},
+    {key:'cng',  label:'CNG',          icon:'ti-flame'},
+  ];
+  cards.innerHTML = types.map(t=>{
+    const val = latest[t.key]||0;
+    const old = prev[t.key]||val;
+    const diff = (val-old).toFixed(2);
+    const cls = diff>0?'up':diff<0?'dn':'nc';
+    const arrow = diff>0?'↑':diff<0?'↓':'→';
+    const history = fuelPrices.slice(0,8).reverse().map(p=>parseFloat(p[t.key]||0));
+    const max = Math.max(...history);
+    return `<div class="fuel-card">
+      <div class="fuel-card-head"><i class="ti ${t.icon}"></i><span>${t.label}</span></div>
+      <div class="fuel-price">₨ ${val}<span>/L</span></div>
+      <div class="fuel-change ${cls}">${arrow} ₨ ${Math.abs(diff)} vs last</div>
+      <div class="mini-chart">${history.map((v,i)=>`<div class="mc-bar ${i===history.length-1?'latest':''}" style="height:${max?((v/max)*100).toFixed(0):30}%"></div>`).join('')}</div>
+    </div>`;
+  }).join('');
+
+  tbody.innerHTML = fuelPrices.map(p=>`<tr>
+    <td class="mono">${p.date}</td>
+    <td class="mono gold">₨ ${p.ron92||'—'}</td>
+    <td class="mono">₨ ${p.ron95||'—'}</td>
+    <td class="mono">₨ ${p.hsd||'—'}</td>
+    <td class="mono">₨ ${p.cng||'—'}</td>
+  </tr>`).join('');
+}
+
+// ── MODALS ────────────────────────────────────────────────────────
+window.showModal = function(type, data={}) {
+  const overlay = document.getElementById('modal-overlay');
+  const modal   = document.getElementById('active-modal');
+  let html = '';
+
+  if (type==='add-car-modal') {
+    html = `<div class="modal-head"><h2>${data.id?'Edit Car':'Add Car'}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group"><label>Make</label><input id="f-make" placeholder="Toyota, Honda…" value="${data.make||''}"/></div>
+      <div class="form-group"><label>Model</label><input id="f-model" placeholder="Corolla, Civic…" value="${data.model||''}"/></div>
+      <div class="form-group"><label>Year</label><input id="f-year" type="number" placeholder="2020" value="${data.year||''}"/></div>
+      <div class="form-group"><label>Variant</label><input id="f-variant" placeholder="GLi, Oriel…" value="${data.variant||''}"/></div>
+      <div class="form-group"><label>Registration No.</label><input id="f-reg" placeholder="LHR-2024-1234" value="${data.reg||''}"/></div>
+      <div class="form-group"><label>Colour</label><input id="f-color" placeholder="White, Silver…" value="${data.color||''}"/></div>
+      <div class="form-group"><label>Odometer (km)</label><input id="f-odo" type="number" placeholder="0" value="${data.odometer||''}"/></div>
+      <div class="form-group"><label>Fuel Type</label>
+        <select id="f-fuel-type">
+          <option ${(data.fuelType||'')==='RON-92'?'selected':''}>RON-92</option>
+          <option ${(data.fuelType||'')==='RON-95'?'selected':''}>RON-95</option>
+          <option ${(data.fuelType||'')==='HSD'?'selected':''}>HSD</option>
+          <option ${(data.fuelType||'')==='CNG'?'selected':''}>CNG</option>
+        </select>
+      </div>
+      <div class="form-section-title">💰 Purchase Details</div>
+      <div class="form-group"><label>Purchase Date</label><input id="f-pdate" type="date" value="${data.purchaseDate||''}"/></div>
+      <div class="form-group"><label>Purchase Price (₨)</label><input id="f-bought" type="number" placeholder="3500000" value="${data.boughtAt||''}"/></div>
+      <div class="form-group span-2" style="flex-direction:row;align-items:center;gap:10px">
+        <input type="checkbox" id="f-install" ${data.hasInstallment?'checked':''} style="width:18px;height:18px;accent-color:var(--gold)"/>
+        <label for="f-install" style="text-transform:none;font-size:13px;color:var(--text);letter-spacing:0">Purchased on installment/loan?</label>
+      </div>
+      <div class="form-group"><label>Down Payment (₨)</label><input id="f-down" type="number" placeholder="1000000" value="${data.downPayment||''}"/></div>
+      <div class="form-group"><label>Loan Amount (₨)</label><input id="f-loan" type="number" placeholder="2500000" value="${data.loanAmount||''}"/></div>
+      <div class="form-group"><label>Monthly EMI (₨)</label><input id="f-emi" type="number" placeholder="42000" value="${data.monthlyEMI||''}"/></div>
+      <div class="form-group"><label>Months Remaining</label><input id="f-months" type="number" placeholder="24" value="${data.monthsLeft||''}"/></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCar('${data.id||''}')"><i class="ti ti-device-floppy"></i>Save Car</button>
+    </div>`;
+  }
+
+  else if (type==='add-fuel-modal') {
+    html = `<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Car</label>
+        <select id="f-car-id">
+          <option value="">Select car…</option>
+          ${cars.filter(c=>c.status!=='sold').map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${data.date||new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Litres filled</label><input id="f-litres" type="number" step="0.1" placeholder="40" value="${data.litres||''}"/></div>
+      <div class="form-group"><label>Total Cost (₨)</label><input id="f-cost" type="number" placeholder="9940" value="${data.cost||''}"/></div>
+      <div class="form-group"><label>Odometer (km)</label><input id="f-odo2" type="number" placeholder="48320" value="${data.odometer||''}"/></div>
+      <div class="form-group"><label>Distance since last fill (km)</label><input id="f-dist" type="number" placeholder="512" value="${data.distance||''}"/></div>
+      <div class="form-group"><label>Fuel Type</label>
+        <select id="f-ftype">
+          <option>RON-92</option><option>RON-95</option><option>HSD</option><option>CNG</option>
+        </select>
+      </div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFuelLog()"><i class="ti ti-device-floppy"></i>Save</button>
+    </div>`;
+  }
+
+  else if (type==='add-service-modal') {
+    html = `<div class="modal-head"><h2>Log Service</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Car</label>
+        <select id="f-car-id">
+          <option value="">Select car…</option>
+          ${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Service Type</label><input id="f-stype" placeholder="Oil change, Tyre rotation…"/></div>
+      <div class="form-group"><label>Cost (₨)</label><input id="f-cost" type="number" placeholder="8500"/></div>
+      <div class="form-group"><label>Odometer at service (km)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
+      <div class="form-group"><label>Next service due (km or date)</label><input id="f-next" placeholder="53000 km or Aug 2026"/></div>
+      <div class="form-group"><label>Status</label>
+        <select id="f-sstatus">
+          <option value="ok">✅ Done (on time)</option>
+          <option value="due-soon">⚠️ Due soon</option>
+          <option value="overdue">🔴 Overdue</option>
+        </select>
+      </div>
+      <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Any additional notes…"></textarea></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveServiceLog()"><i class="ti ti-device-floppy"></i>Save</button>
+    </div>`;
+  }
+
+  else if (type==='add-fuel-price-modal') {
+    html = `<div class="modal-head"><h2>Update Fuel Prices</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>RON-92 (₨/L)</label><input id="f-ron92" type="number" step="0.01" placeholder="248.74"/></div>
+      <div class="form-group"><label>RON-95 (₨/L)</label><input id="f-ron95" type="number" step="0.01" placeholder="258.40"/></div>
+      <div class="form-group"><label>HSD Diesel (₨/L)</label><input id="f-hsd" type="number" step="0.01" placeholder="252.30"/></div>
+      <div class="form-group"><label>CNG (₨/kg)</label><input id="f-cng" type="number" step="0.01" placeholder="135.00"/></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFuelPrice()"><i class="ti ti-device-floppy"></i>Save Prices</button>
+    </div>`;
+  }
+
+  else if (type==='mark-sold-modal') {
+    html = `<div class="modal-head"><h2>Mark as Sold</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid cols-1">
+      <div class="form-group"><label>Sell Date</label><input id="f-sell-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Sold For (₨)</label><input id="f-sold-at" type="number" placeholder="4200000"/></div>
+      <div class="form-group"><label>Notes</label><textarea id="f-sell-notes" rows="2" placeholder="Sold to…"></textarea></div>
+    </div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSold('${data.carId}')"><i class="ti ti-tag"></i>Confirm Sale</button>
+    </div>`;
+  }
+
+  modal.innerHTML = html;
+  overlay.classList.add('open');
+}
+
+window.closeModal = function() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+
+// ── SAVE FUNCTIONS ────────────────────────────────────────────────
+window.saveCar = async function(editId='') {
+  const data = {
+    make:         v('f-make'),
+    model:        v('f-model'),
+    year:         v('f-year'),
+    variant:      v('f-variant'),
+    reg:          v('f-reg'),
+    color:        v('f-color'),
+    odometer:     n('f-odo'),
+    fuelType:     v('f-fuel-type'),
+    purchaseDate: v('f-pdate'),
+    boughtAt:     n('f-bought'),
+    hasInstallment: document.getElementById('f-install')?.checked||false,
+    downPayment:  n('f-down'),
+    loanAmount:   n('f-loan'),
+    monthlyEMI:   n('f-emi'),
+    monthsLeft:   n('f-months'),
+    status:       'owned',
+  };
+  if (!data.make||!data.model) { showToast('Make and model are required','error'); return; }
+  if (editId) await updateDoc_('cars', editId, data);
+  else await addDoc_('cars', data);
+  closeModal(); showToast('Car saved!','success');
+}
+
+window.saveFuelLog = async function() {
+  const carId  = v('f-car-id');
+  const litres = n('f-litres');
+  const dist   = n('f-dist');
+  const kmpl   = litres && dist ? parseFloat((dist/litres).toFixed(2)) : 0;
+  if (!carId) { showToast('Select a car','error'); return; }
+  await addDoc_('fuelLogs', {
+    carId, date:v('f-date'), litres, cost:n('f-cost'),
+    odometer:n('f-odo2'), distance:dist, kmpl, fuelType:v('f-ftype'),
+  });
+  // Update car odometer
+  if (n('f-odo2')) await updateDoc_('cars', carId, {odometer:n('f-odo2')});
+  closeModal(); showToast('Fill-up logged!','success');
+}
+
+window.saveServiceLog = async function() {
+  const carId = v('f-car-id');
+  if (!carId) { showToast('Select a car','error'); return; }
+  await addDoc_('serviceLogs', {
+    carId, date:v('f-date'), type:v('f-stype'),
+    cost:n('f-cost'), odometer:n('f-odo3'),
+    nextDue:v('f-next'), status:v('f-sstatus'), notes:v('f-notes'),
+  });
+  closeModal(); showToast('Service logged!','success');
+}
+
+window.saveFuelPrice = async function() {
+  const date = v('f-date');
+  if (!date) { showToast('Date required','error'); return; }
+  await addDoc_('fuelPrices', {
+    date, ron92:n('f-ron92'), ron95:n('f-ron95'), hsd:n('f-hsd'), cng:n('f-cng'),
+  });
+  closeModal(); showToast('Fuel prices updated!','success');
+}
+
+window.markSold = function(carId) {
+  showModal('mark-sold-modal', {carId});
+}
+window.confirmSold = async function(carId) {
+  const soldAt   = n('f-sold-at');
+  const sellDate = v('f-sell-date');
+  if (!soldAt) { showToast('Enter sale price','error'); return; }
+  await updateDoc_('cars', carId, {status:'sold', soldAt, sellDate, sellNotes:v('f-sell-notes')});
+  closeModal(); showToast('Car marked as sold!','success');
+}
+
+window.logFuelFor = function(carId) { showModal('add-fuel-modal',{carId}); }
+window.logServiceFor = function(carId) { showModal('add-service-modal',{carId}); }
+window.openCarDetail = function(id) {
+  const car = cars.find(c=>c.id===id);
+  if (!car) return;
+  showModal('add-car-modal', car);
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+window.saveFirebaseConfig = function() {
+  const cfg = {
+    apiKey:            document.getElementById('cfg-apiKey').value.trim(),
+    authDomain:        document.getElementById('cfg-authDomain').value.trim(),
+    projectId:         document.getElementById('cfg-projectId').value.trim(),
+    storageBucket:     document.getElementById('cfg-storageBucket').value.trim(),
+    messagingSenderId: document.getElementById('cfg-messagingSenderId').value.trim(),
+    appId:             document.getElementById('cfg-appId').value.trim(),
+  };
+  if (!cfg.apiKey) { showToast('API Key is required','error'); return; }
+  localStorage.setItem('fl_firebase_config', JSON.stringify(cfg));
+  showToast('Config saved! Reloading…','success');
+  setTimeout(()=>location.reload(), 1200);
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────
+window.showPage = function(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item, .mob-nav-item').forEach(n=>n.classList.remove('active'));
+  const el = document.getElementById('page-'+page);
+  if (el) el.classList.add('active');
+  document.querySelectorAll(`[data-page="${page}"]`).forEach(n=>n.classList.add('active'));
+}
+
+document.querySelectorAll('.nav-item[data-page], .mob-nav-item[data-page]').forEach(item=>{
+  item.addEventListener('click', ()=>showPage(item.dataset.page));
+});
+
+window.filterCars = function(filter, btn) {
+  carsFilter = filter;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCarList();
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const v = id => document.getElementById(id)?.value?.trim()||'';
+const n = id => parseFloat(document.getElementById(id)?.value)||0;
+const fmt  = n => (parseFloat(n)||0).toLocaleString('en-PK');
+const fmtL = n => { const v=parseFloat(n)||0; return v>=100000?(v/100000).toFixed(2)+'L':v.toLocaleString('en-PK'); }
+const fmtKm = n => (parseFloat(n)||0).toLocaleString('en-PK');
+
+window.showToast = function(msg, type='success') {
+  const t = document.getElementById('toast');
+  const icon = t.querySelector('i');
+  document.getElementById('toast-msg').textContent = msg;
+  t.className = 'show ' + type;
+  icon.className = 'ti ' + (type==='success'?'ti-check':'ti-alert-circle');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// ── PWA SERVICE WORKER ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────
+initFirebase();
+</script>
+</body>
+</html>
