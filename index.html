@@ -1239,8 +1239,9 @@ window.showModal=function(type,data={}){
       <div class="form-group"><label>Fuel Type</label>
         <select id="f-ftype2"><option>RON-92</option><option>RON-95</option><option>HSD</option><option>CNG</option></select>
       </div>
-      <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40" oninput="calcKmpl()"/></div>
-      <div class="form-group"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="calcKmpl()"/></div>
+      <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')"./><span class="input-hint">Price per litre</span></div>
+      <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40" oninput="autoFuel('litres')"./></div>
+      <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"./><span class="input-hint">Fill any 2 of the 3 fields &mdash; 3rd auto-calculates</span></div>
       <div class="form-group"><label>Odometer Now (KM)</label><input id="f-odo2" type="number" placeholder="48320" oninput="calcKmpl()"/></div>
       <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill estimate</span></div>
       <div class="form-group" id="kmpl-preview" style="display:none;grid-column:1/-1">
@@ -1404,6 +1405,26 @@ window.acSelect=function(inputId,val){
   if(acList)acList.classList.remove('open');
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))document.querySelectorAll('.ac-list').forEach(l=>l.classList.remove('open'));});
+
+// ── AUTO FUEL CALC (any 2 of rate/litres/cost fills 3rd) ─────────
+window.autoFuel=function(changed){
+  const rateEl=document.getElementById('f-rate');
+  const litresEl=document.getElementById('f-litres');
+  const costEl=document.getElementById('f-cost');
+  if(!rateEl||!litresEl||!costEl)return;
+  const rate=parseFloat(rateEl.value)||0;
+  const litres=parseFloat(litresEl.value)||0;
+  const cost=parseFloat(costEl.value)||0;
+  if(changed==='rate'||changed==='litres'){
+    if(rate>0&&litres>0){costEl.value=(rate*litres).toFixed(0);}
+    else if(rate>0&&cost>0&&changed==='rate'){litresEl.value=(cost/rate).toFixed(2);}
+  }
+  if(changed==='cost'){
+    if(cost>0&&litres>0){rateEl.value=(cost/litres).toFixed(2);}
+    else if(cost>0&&rate>0){litresEl.value=(cost/rate).toFixed(2);}
+  }
+  calcKmpl();
+}
 
 // ── KM/L PREVIEW ──────────────────────────────────────────────────
 window.calcKmpl=function(){
