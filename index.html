@@ -1537,7 +1537,7 @@ window.saveFirebaseConfig=function(){
 const v=id=>document.getElementById(id)?.value?.trim()||'';
 const n=id=>parseFloat(document.getElementById(id)?.value)||0;
 const fmt=n=>(parseFloat(n)||0).toLocaleString('en-PK');
-const fmtPKR=n=>{const v=parseFloat(n)||0;if(v>=10000000)return(v/10000000).toFixed(2)+'Cr';if(v>=100000)return(v/100000).toFixed(2)+'L';return v.toLocaleString('en-PK');};
+const fmtPKR=n=>(parseFloat(n)||0).toLocaleString('en-PK');
 const fmtKM=n=>(parseFloat(n)||0).toLocaleString('en-PK');
 
 window.showToast=function(msg,type='success'){
