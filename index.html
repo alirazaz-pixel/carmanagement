@@ -1415,13 +1415,18 @@ window.autoFuel=function(changed){
   const rate=parseFloat(rateEl.value)||0;
   const litres=parseFloat(litresEl.value)||0;
   const cost=parseFloat(costEl.value)||0;
-  if(changed==='rate'||changed==='litres'){
-    if(rate>0&&litres>0){costEl.value=(rate*litres).toFixed(0);}
-    else if(rate>0&&cost>0&&changed==='rate'){litresEl.value=(cost/rate).toFixed(2);}
+  // Only calculate the field that is NOT the one being typed in
+  if(changed==='rate'){
+    if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
+    else if(rate>0&&cost>0)litresEl.value=(cost/rate).toFixed(2);
   }
-  if(changed==='cost'){
-    if(cost>0&&litres>0){rateEl.value=(cost/litres).toFixed(2);}
-    else if(cost>0&&rate>0){litresEl.value=(cost/rate).toFixed(2);}
+  else if(changed==='litres'){
+    if(litres>0&&rate>0)costEl.value=(rate*litres).toFixed(0);
+    else if(litres>0&&cost>0)rateEl.value=(cost/litres).toFixed(2);
+  }
+  else if(changed==='cost'){
+    if(cost>0&&litres>0)rateEl.value=(cost/litres).toFixed(2);
+    else if(cost>0&&rate>0)litresEl.value=(cost/rate).toFixed(2);
   }
   calcKmpl();
 }
