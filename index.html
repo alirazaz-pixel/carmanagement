@@ -1099,6 +1099,13 @@ window.removeSvcType=function(i){
   localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
   renderServiceTypes();showToast('Removed');
 }
+window.checkSvcTypeSelect=function(sel){
+  if(sel.value==='__manage__'){
+    closeModal();
+    showPage('svc-types');
+    sel.selectedIndex=0;
+  }
+}
 window.resetSvcTypes=function(){
   if(!confirm('Reset to default 27 service types? Your custom ones will be lost.'))return;
   svcTypes=[...DEFAULT_SVC_TYPES];
@@ -1279,7 +1286,7 @@ window.showModal=function(type,data={}){
         <select id="f-car-id">${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
-      <div class="form-group"><label>Service Type</label><select id="f-stype">${svcOptions}</select><span class="input-hint">Can't find it? Go to Service Types in the sidebar to add more</span></div>
+      <div class="form-group"><label>Service Type</label><select id="f-stype" onchange="checkSvcTypeSelect(this)">${svcOptions}<option disabled>──────────────</option><option value="__manage__">⚙️ Add / Remove Service Types...</option></select><span class="input-hint">Select a service or manage your list at the bottom</span></div>
       <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500"/></div>
       <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
       <div class="form-group span-2"><label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— you decide</span></label><input id="f-next-odo" type="number" placeholder="53000"/><span class="input-hint">Enter the odometer reading when next service should be done</span></div>
