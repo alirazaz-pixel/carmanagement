@@ -381,11 +381,24 @@ window.FIREBASE_CONFIG = {
         <div class="metric" style="--accent:var(--green)"><div class="m-label"><i class="ti ti-trending-up"></i>Total P&L</div><div class="m-val" id="dm-pl">—</div><div class="m-sub" id="dm-pl-sub">sold cars</div></div>
         <div class="metric" style="--accent:var(--red)"><div class="m-label"><i class="ti ti-alert-triangle"></i>Service Alerts</div><div class="m-val red" id="dm-alerts">—</div><div class="m-sub">need attention</div></div>
         <div class="metric" style="--accent:var(--amber)"><div class="m-label"><i class="ti ti-gas-station"></i>RON-92 Price</div><div class="m-val amber" id="dm-petrol">—</div><div class="m-sub" id="dm-petrol-sub">per litre PKR</div></div>
-        <div class="metric" style="--accent:var(--purple)"><div class="m-label"><i class="ti ti-cash"></i>Monthly Cost</div><div class="m-val" id="dm-monthly" style="color:var(--purple)">—</div><div class="m-sub">fuel + service PKR</div></div>
+        <div class="metric" style="--accent:var(--purple)"><div class="m-label"><i class="ti ti-calendar-month"></i>Monthly Cost</div><div class="m-val" id="dm-monthly" style="color:var(--purple)">—</div><div class="m-sub" id="dm-monthly-sub">fuel + service PKR</div></div>
+        <div class="metric" style="--accent:var(--red)"><div class="m-label"><i class="ti ti-sun"></i>Daily Cost</div><div class="m-val" id="dm-daily" style="color:var(--red)">—</div><div class="m-sub" id="dm-daily-sub">PKR per day</div></div>
+        <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-road"></i>Avg KM/Day</div><div class="m-val blue" id="dm-kmday">—</div><div class="m-sub" id="dm-kmday-sub">based on odometer</div></div>
       </div>
       <div class="chart-grid">
         <div class="chart-panel"><div class="section-head"><h2>Fuel Economy Trend</h2></div><canvas id="chart-economy"></canvas></div>
         <div class="chart-panel"><div class="section-head"><h2>Monthly Fuel Spend (PKR)</h2></div><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head">
+          <h2>Month-on-Month Comparison</h2>
+          <div style="display:flex;gap:6px">
+            <button class="tab-btn active" id="mom-cost-btn" onclick="setMOMChart('cost',this)" style="font-size:11px;padding:4px 10px">Running Cost</button>
+            <button class="tab-btn" id="mom-fuel-btn" onclick="setMOMChart('fuel',this)" style="font-size:11px;padding:4px 10px">Petrol (Litres)</button>
+            <button class="tab-btn" id="mom-both-btn" onclick="setMOMChart('both',this)" style="font-size:11px;padding:4px 10px">Both</button>
+          </div>
+        </div>
+        <canvas id="chart-mom" style="max-height:220px;margin-top:12px"></canvas>
       </div>
       <div><div class="section-head"><h2>My Fleet</h2><a onclick="showPage('cars')">View all →</a></div><div class="car-cards" id="dash-cars" style="margin-top:12px"></div></div>
       <div>
@@ -764,12 +777,126 @@ function renderAll(){
   renderServiceTypes();renderNotifications();renderReminders();renderCharts();checkTokenAlerts();
 }
 
+// ── COST CALCULATION ENGINE ──────────────────────────────────────
+
+// Calculate average KM per day for a car (or filtered set)
+function calcKMperDay(carList, fuelList){
+  // Use odometer readings over time from fuel logs and service logs
+  let best=0;
+  carList.forEach(c=>{
+    const purchaseDate=c.purchaseDate;
+    const odoAtPurchase=parseFloat(c.odoAtPurchase||0);
+    const currentOdo=parseFloat(c.odometer||0);
+    if(!purchaseDate||currentOdo<=odoAtPurchase)return;
+    const days=(Date.now()-new Date(purchaseDate).getTime())/(1000*60*60*24);
+    if(days<1)return;
+    const kmDay=(currentOdo-odoAtPurchase)/days;
+    best+=kmDay;
+  });
+  if(best>0)return best;
+  // Fallback: use fuel log odometer span
+  const sorted=[...fuelList].filter(f=>f.odometer&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(sorted.length>=2){
+    const first=sorted[0];const last=sorted[sorted.length-1];
+    const days=(new Date(last.date)-new Date(first.date))/(1000*60*60*24);
+    if(days>0)return (parseFloat(last.odometer)-parseFloat(first.odometer))/days;
+  }
+  return 0;
+}
+
+// Calculate daily service cost for a set of service logs
+function calcDailySvcCost(svcList, carList, fuelList){
+  const kmDay=calcKMperDay(carList, fuelList);
+  if(!kmDay)return 0;
+  // Get latest service per car+type
+  const latest={};
+  [...svcList].reverse().forEach(s=>{
+    const k=s.carId+'__'+s.type;
+    if(!latest[k])latest[k]=s;
+  });
+  let dailyCost=0;
+  Object.values(latest).forEach(s=>{
+    if(!s.nextDueOdo||!s.cost)return;
+    const car=carList.find(c=>c.id===s.carId);
+    if(!car)return;
+    const curOdo=parseFloat(car.odometer||0);
+    const nextDue=parseFloat(s.nextDueOdo);
+    const kmLeft=nextDue-curOdo;
+    if(kmLeft<=0)return; // overdue, skip
+    const daysLeft=kmLeft/kmDay;
+    if(daysLeft>0) dailyCost+=parseFloat(s.cost)/daysLeft;
+  });
+  return dailyCost;
+}
+
+// Calculate monthly service cost contribution (daily × days in month)
+function calcMonthlySvcCost(svcList, carList, fuelList){
+  const dailyCost=calcDailySvcCost(svcList, carList, fuelList);
+  const now=new Date();
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  return dailyCost*daysInMonth;
+}
+
+// Get month keys for last N months
+function lastNMonths(n){
+  const months=[];
+  const now=new Date();
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  return months;
+}
+
+let momChartType='cost';
+window.setMOMChart=function(type,btn){
+  momChartType=type;
+  document.querySelectorAll('[id^="mom-"]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderMOMChart();
+}
+
+function renderMOMChart(){
+  const d=chartDefaults();
+  const months=lastNMonths(6);
+  const labels=months.map(m=>{const[y,mo]=m.split('-');return mo+'/'+y.slice(2);});
+
+  const filteredFuelAll=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const filteredSvcAll=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
+  const filteredCarsAll=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
+
+  // Monthly fuel cost per month
+  const fuelCosts=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  // Monthly litres per month
+  const fuelLitres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
+  // Monthly service cost (actual logged services per month)
+  const svcCosts=months.map(m=>filteredSvcAll.filter(s=>s.date&&s.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  // Total running cost = fuel + service
+  const totalCosts=months.map((m,i)=>fuelCosts[i]+svcCosts[i]);
+
+  let datasets=[];
+  if(momChartType==='cost'||momChartType==='both'){
+    datasets.push({label:'Running Cost (PKR)',data:totalCosts,backgroundColor:'rgba(167,139,250,0.7)',borderColor:'rgba(167,139,250,1)',borderRadius:4,yAxisID:'y'});
+  }
+  if(momChartType==='fuel'||momChartType==='both'){
+    datasets.push({label:'Petrol (Litres)',data:fuelLitres,backgroundColor:'rgba(232,196,74,0.7)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
+  }
+
+  const scales={x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor},title:{display:true,text:'PKR',color:d.textColor,font:{size:10}}}};
+  if(momChartType==='both'){
+    scales.y1={type:'linear',display:true,position:'right',ticks:{color:'rgba(232,196,74,0.8)',font:{size:10}},grid:{drawOnChartArea:false},title:{display:true,text:'Litres',color:'rgba(232,196,74,0.8)',font:{size:10}}};
+  }
+
+  mkChart('chart-mom',{type:'bar',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales}});
+}
+
 // ── DASHBOARD CAR FILTER ─────────────────────────────────────────
 window.setDashCar=function(carId, btn){
   dashCarId=carId;
   document.querySelectorAll('#dash-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
   renderDashboard();
+  renderMOMChart();
 }
 
 function buildDashCarFilter(){
@@ -825,11 +952,38 @@ function renderDashboard(){
     document.getElementById('dm-petrol-sub').textContent='updated '+l.date;
   }
 
-  // Monthly cost this month
+  // ── KM per day ──
+  const kmDay=calcKMperDay(filteredCars,filteredFuel);
+  const kmDayEl=document.getElementById('dm-kmday');
+  const kmDaySubEl=document.getElementById('dm-kmday-sub');
+  if(kmDayEl)kmDayEl.textContent=kmDay>0?kmDay.toFixed(1):'—';
+  if(kmDaySubEl)kmDaySubEl.textContent=kmDay>0?'KM per day avg':'need more data';
+
+  // ── Daily cost ──
+  const dailyFuelCost=filteredFuel.length>0?(()=>{
+    const now2=new Date();
+    const ym2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
+    const monthFuelTotal=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym2)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const daysPassed=now2.getDate();
+    return daysPassed>0?monthFuelTotal/daysPassed:0;
+  })():0;
+  const dailySvcCost=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel);
+  const totalDailyCost=dailyFuelCost+dailySvcCost;
+  const dailyEl=document.getElementById('dm-daily');
+  const dailySubEl=document.getElementById('dm-daily-sub');
+  if(dailyEl)dailyEl.textContent=totalDailyCost>0?fmtPKR(Math.round(totalDailyCost)):'—';
+  if(dailySubEl)dailySubEl.textContent=totalDailyCost>0?'fuel ₨'+Math.round(dailyFuelCost)+' + svc ₨'+Math.round(dailySvcCost):'PKR per day';
+
+  // ── Monthly cost (fuel actual + service spread over month) ──
   const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const monthFuel=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const monthSvc=filteredSvc.filter(s=>s.date&&s.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  document.getElementById('dm-monthly').textContent=fmtPKR(monthFuel+monthSvc);
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const monthlySvcSpread=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel)*daysInMonth;
+  const totalMonthly=monthFuel+monthlySvcSpread;
+  const monthlyEl=document.getElementById('dm-monthly');
+  const monthlySubEl=document.getElementById('dm-monthly-sub');
+  if(monthlyEl)monthlyEl.textContent=totalMonthly>0?fmtPKR(Math.round(totalMonthly)):'—';
+  if(monthlySubEl)monthlySubEl.textContent=totalMonthly>0?'fuel ₨'+fmtPKR(Math.round(monthFuel))+' + svc est.':'fuel + service PKR';
 
   renderCarCards('dash-cars',filteredCars.slice(0,6));
   const svcAlerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
@@ -1426,6 +1580,7 @@ function mkChart(id,config){
 }
 
 function renderCharts(){
+  renderMOMChart();
   const d=chartDefaults();
   const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}}}};
 
