@@ -365,7 +365,8 @@ window.FIREBASE_CONFIG = {
       <div class="ph">
         <div class="ph-left"><h1>Dashboard</h1><p id="dash-sub">Loading…</p></div>
         <div class="ph-right">
-          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-download"></i>Export All</button>
+          <button class="btn btn-secondary" onclick="exportDashboardPDF()"><i class="ti ti-file-type-pdf"></i>Download PDF</button>
+          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-file-spreadsheet"></i>Export Excel</button>
           <button class="btn btn-primary" onclick="showModal('car')"><i class="ti ti-plus"></i>Add Car</button>
         </div>
       </div>
@@ -1145,6 +1146,8 @@ window.showOdoModal=function(carId){showModal('odo',{carId});}
 // ── NEXT DUE CALCULATOR ───────────────────────────────────────────
 window.calcNextDue=function(inp){
   const val=inp.value.trim();
+  const resultBox=document.getElementById('f-next-odo-result');
+  const calcSpan=document.getElementById('f-next-odo-calc');
   const hint=document.getElementById('f-next-odo-hint');
   if(val.startsWith('+')){
     const interval=parseFloat(val.slice(1))||0;
@@ -1154,11 +1157,28 @@ window.calcNextDue=function(inp){
     if(interval>0&&odo>0){
       const result=odo+interval;
       inp.dataset.computed=result;
-      if(hint)hint.textContent='= '+odo.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
+      if(calcSpan)calcSpan.textContent=odo.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
+      if(resultBox)resultBox.style.display='block';
+      if(hint)hint.textContent='Click the result above to fill it in';
+    } else {
+      if(resultBox)resultBox.style.display='none';
+      if(hint)hint.textContent='Select a car first so we know its current odometer';
     }
   } else {
     inp.dataset.computed='';
-    if(hint)hint.textContent='Tip: type +5000 to auto-add 5,000 KM to current odometer';
+    if(resultBox)resultBox.style.display='none';
+    if(hint)hint.textContent='Tip: type +5000 to calculate next due from current odometer';
+  }
+}
+window.fillNextDue=function(){
+  const inp=document.getElementById('f-next-odo');
+  const resultBox=document.getElementById('f-next-odo-result');
+  const hint=document.getElementById('f-next-odo-hint');
+  if(inp&&inp.dataset.computed){
+    inp.value=inp.dataset.computed;
+    inp.dataset.computed='';
+    if(resultBox)resultBox.style.display='none';
+    if(hint)hint.textContent='✅ Filled! You can still edit this number manually.';
   }
 }
 
@@ -1192,21 +1212,29 @@ function renderReminders(){
 
 function renderReminderList(elId, list, status){
   const el=document.getElementById(elId); if(!el)return;
-  if(!list.length){el.innerHTML=`<div style="padding:14px 16px;font-size:13px;color:var(--text3)">None</div>`;return;}
+  if(!list.length){el.innerHTML='<div style="padding:14px 16px;font-size:13px;color:var(--text3)">None</div>';return;}
   el.innerHTML=list.map(s=>{
     const car=cars.find(c=>c.id===s.carId);
     const kl=kmLeft(s);
     const ds=daysSince(s.date);
     const col=status==='overdue'?'red':status==='due-soon'?'amber':'green';
-    return`<div class="service-item" style="${status==='overdue'?'border-color:rgba(248,113,113,0.3);':''}">
+    const nextDueOdo=s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString():null;
+    const curOdo=car?parseFloat(car.odometer||0).toLocaleString():null;
+    let dueInfo='';
+    if(nextDueOdo){
+      if(kl<0) dueInfo='Was due at '+nextDueOdo+' KM — now at '+curOdo+' KM';
+      else dueInfo='Due at '+nextDueOdo+' KM (now: '+curOdo+' KM)';
+    }
+    return`<div class="service-item" style="${status==='overdue'?'border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.03)':''}">
       <div class="svc-icon ${col}"><i class="ti ti-tool"></i></div>
       <div class="svc-main">
         <h4>${car?car.make+' '+car.model:'Unknown'} — ${s.type}</h4>
-        <p>${s.station?'📍 '+s.station+' · ':''} Last: ${s.date}${ds!==null?' ('+ds+' days ago)':''}</p>
+        <p style="margin-top:3px">${s.station?'📍 '+s.station+' &nbsp;·&nbsp; ':''} Last done: ${s.date}${ds!==null?' ('+ds+' days ago)':''}</p>
+        ${dueInfo?`<p style="margin-top:2px;color:var(--${col});font-size:12px">🎯 ${dueInfo}</p>`:''}
       </div>
       <div class="svc-right">
-        <div class="due" style="color:var(--${col})">${kl===null?'—':kl<0?'Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</div>
-        <div class="days">${s.nextDueOdo?'Due at '+parseFloat(s.nextDueOdo).toLocaleString()+' KM':''}</div>
+        <div class="due" style="color:var(--${col});font-size:14px;font-weight:700">${kl===null?'—':kl<0?'⚠️ Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</div>
+        <div class="days" style="margin-top:4px">${kl!==null&&kl>0?'Est. '+Math.round(kl/50)+' fill-ups away':''}</div>
       </div>
     </div>`;
   }).join('');
@@ -1475,12 +1503,16 @@ window.showModal=function(type,data={}){
       <div class="form-group"><label>Service Type</label><select id="f-stype" onchange="checkSvcTypeSelect(this)">${svcOptions}<option disabled>──────────────</option><option value="__manage__">⚙️ Add / Remove Service Types...</option></select><span class="input-hint">Select a service or manage your list at the bottom</span></div>
       <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500"/></div>
       <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
-      <div class="form-group"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, PSO…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
-      <div class="form-group"><label>City / Area</label><input id="f-svc-city" placeholder="Lahore, DHA Phase 5…"/></div>
+      <div class="form-group span-2"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, Filter House…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
       <div class="form-group span-2">
-        <label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— type full number OR +interval e.g. +5000</span></label>
-        <input id="f-next-odo" placeholder="53000 or +5000" oninput="calcNextDue(this)"/>
-        <span class="input-hint" id="f-next-odo-hint">Tip: type +5000 to auto-add 5,000 KM to current odometer</span>
+        <label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— type full number OR type +5000 to add interval</span></label>
+        <input id="f-next-odo" placeholder="39218 or +5000" oninput="calcNextDue(this)"/>
+        <div id="f-next-odo-result" style="display:none;margin-top:6px;background:var(--gold-bg);border:1px solid rgba(232,196,74,0.3);border-radius:8px;padding:10px 14px;cursor:pointer;transition:background 0.15s" onclick="fillNextDue()" title="Click to use this value">
+          <span style="font-size:12px;color:var(--text3)">Calculated result — click to use:</span><br/>
+          <span id="f-next-odo-calc" style="font-size:16px;font-weight:700;color:var(--gold)"></span>
+          <span style="font-size:12px;color:var(--text3);margin-left:8px">👆 tap to fill</span>
+        </div>
+        <span class="input-hint" id="f-next-odo-hint">Tip: type +5000 to calculate next due from current odometer</span>
       </div>
       <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…"></textarea></div>
       <div class="form-group span-2"><label>Receipt Photo (optional)</label>
@@ -1611,7 +1643,7 @@ window.saveService=async function(){
   } else {
     nextDueOdo=parseFloat(nextDueRaw)||0;
   }
-  await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),city:v('f-svc-city'),notes:v('f-notes'),receiptUrl,status:'ok'});
+  await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),notes:v('f-notes'),receiptUrl,status:'ok'});
   if(odo)await updateRec('cars',carId,{odometer:odo});
   closeModal();showToast('Service logged!');
 }
@@ -1703,6 +1735,82 @@ window.exportAll=function(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(fpData),'Fuel Prices');
   XLSX.writeFile(wb,'FleetLedger_Export_'+new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Excel exported!');
+}
+
+window.exportDashboardPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  let y=18;
+  doc.setFontSize(18);doc.setTextColor(232,196,74);doc.text('FleetLedger — Full Fleet Report',14,y);
+  y+=8;doc.setFontSize(10);doc.setTextColor(150,150,180);doc.text('Generated: '+new Date().toLocaleDateString()+' | Total Cars: '+cars.length,14,y);
+  y+=10;
+
+  cars.forEach((c,idx)=>{
+    if(y>240){doc.addPage();y=18;}
+    // Car header
+    doc.setFillColor(15,15,26);doc.rect(0,y-4,220,14,'F');
+    doc.setFontSize(13);doc.setTextColor(232,196,74);
+    doc.text((idx+1)+'. '+c.make+' '+c.model+' '+c.year+' — '+c.reg,14,y+5);
+    doc.setTextColor(150,150,180);doc.setFontSize(9);
+    doc.text(c.status.toUpperCase()+(c.hasInstallment?' | INSTALLMENT':''),180,y+5);
+    y+=16;
+
+    // Car details
+    doc.setTextColor(200,200,220);doc.setFontSize(9);
+    const details=[
+      ['Colour',c.color||'—'],['Fuel Type',c.fuelType||'—'],
+      ['Odo at Purchase',c.odoAtPurchase?parseFloat(c.odoAtPurchase).toLocaleString()+' KM':'—'],
+      ['Current Odometer',c.odometer?parseFloat(c.odometer).toLocaleString()+' KM':'—'],
+      ['Bought For','PKR '+parseFloat(c.boughtAt||0).toLocaleString()],
+      ['Purchase Date',c.purchaseDate||'—'],
+    ];
+    if(c.hasInstallment){
+      details.push(['EMI','PKR '+parseFloat(c.monthlyEMI||0).toLocaleString()+'/mo']);
+      details.push(['Months Left',c.monthsLeft||'—']);
+    }
+    if(c.status==='sold'){
+      details.push(['Sold For','PKR '+parseFloat(c.soldAt||0).toLocaleString()]);
+      details.push(['Sell Date',c.sellDate||'—']);
+      const pl=parseFloat(c.soldAt||0)-parseFloat(c.boughtAt||0);
+      details.push(['Profit/Loss',(pl>=0?'+':'')+'PKR '+pl.toLocaleString()]);
+    }
+    details.forEach((d,i)=>{
+      const col=i%2===0?14:110;const row=Math.floor(i/2);
+      doc.setTextColor(150,150,180);doc.text(d[0]+':',col,y+row*7);
+      doc.setTextColor(220,220,240);doc.text(d[1],col+40,y+row*7);
+    });
+    y+=Math.ceil(details.length/2)*7+4;
+
+    // Fuel summary
+    const carFuel=fuelLogs.filter(f=>f.carId===c.id);
+    const fullFills=carFuel.filter(f=>f.fillType==='full'&&f.kmpl>0);
+    const avgKmpl=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):'—';
+    const totalFuelCost=carFuel.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    doc.setTextColor(96,165,250);doc.text('Fuel: Avg '+avgKmpl+' KM/L | Total spent: PKR '+totalFuelCost.toLocaleString()+' | '+carFuel.length+' fill-ups',14,y);
+    y+=7;
+
+    // Service summary
+    const carSvc=serviceLogs.filter(s=>s.carId===c.id);
+    const totalSvcCost=carSvc.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    doc.setTextColor(74,222,128);doc.text('Service: '+carSvc.length+' records | Total spent: PKR '+totalSvcCost.toLocaleString(),14,y);
+    y+=7;
+
+    // Upcoming services
+    const latest={};
+    [...carSvc].reverse().forEach(s=>{if(!latest[s.type])latest[s.type]=s;});
+    const upcoming=Object.values(latest).filter(s=>svcStatus(s)!=='ok').slice(0,3);
+    if(upcoming.length){
+      doc.setTextColor(251,191,36);doc.text('⚠ Alerts: '+upcoming.map(s=>{const kl=kmLeft(s);return s.type+(kl!==null?(kl<0?' OVERDUE':' '+kl.toLocaleString()+'KM left'):'');}).join(' | '),14,y);
+      y+=7;
+    }
+
+    y+=6;
+    // Divider
+    doc.setDrawColor(40,40,60);doc.line(14,y,196,y);y+=8;
+  });
+
+  doc.save('FleetLedger_Report_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('Fleet PDF downloaded!');
 }
 
 window.exportFuelLogPDF=function(){
