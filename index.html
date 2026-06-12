@@ -514,11 +514,15 @@ window.FIREBASE_CONFIG = {
     <div class="page" id="page-svc-types">
       <div class="ph"><div class="ph-left"><h1>Service Types</h1><p>Manage your service categories</p></div></div>
       <div class="table-wrap" style="padding:20px">
-        <h2 style="font-size:14px;margin-bottom:14px">Your Service Types</h2>
+        <h2 style="font-size:14px;margin-bottom:6px">Your Service Types</h2>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Click the ✕ on any service to remove it. Add your own below.</p>
         <div class="svc-types-list" id="svc-types-list"></div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <input id="new-svc-type" placeholder="Add new service type…" style="flex:1" onkeypress="if(event.key==='Enter')addSvcType()"/>
+        <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+          <input id="new-svc-type" placeholder="Type new service name and press Enter or click Add…" style="flex:1" onkeypress="if(event.key==='Enter')addSvcType()"/>
           <button class="btn btn-primary" onclick="addSvcType()"><i class="ti ti-plus"></i>Add</button>
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <button class="btn btn-secondary btn-sm" onclick="resetSvcTypes()"><i class="ti ti-refresh"></i>Reset to Defaults</button>
         </div>
       </div>
     </div>
@@ -582,7 +586,7 @@ let db=null, storage=null;
 let cars=[], fuelLogs=[], serviceLogs=[], fuelPrices=[];
 let carsFilter='all';
 let chartInstances={};
-let DEFAULT_SVC_TYPES=['Oil Change','AC Filter','Air Filter','Tyre Rotation','Brake Pads','Spark Plugs','Coolant','Battery','Wheel Alignment','Transmission Oil'];
+let DEFAULT_SVC_TYPES=['Oil Change','Oil Filter Change','Air Filter Change','Fuel Filter Change','Spark Plugs Change','Transmission Oil Change','Coolant / Radiator Flush','Engine Tune-up','Tyre Puncture Repair','Tyre Rotation','Tyre Balancing','Wheel Alignment','Tyre Replacement','Brake Pads Change','Brake Disc Change','Brake Oil Change','AC Filter Change','AC Gas Refill','AC Service / Cleaning','Battery Change','Battery Terminals Cleaning','Car Wash / Detailing','Windshield Wiper Change','Headlight / Bulb Change','Suspension Check','Steering Oil Change','General Inspection'];
 let svcTypes = JSON.parse(localStorage.getItem('fl_svc_types')||JSON.stringify(DEFAULT_SVC_TYPES));
 let theme = localStorage.getItem('fl_theme')||'dark';
 
@@ -1071,7 +1075,14 @@ function renderInsights(){
 // ── SERVICE TYPES ─────────────────────────────────────────────────
 function renderServiceTypes(){
   const el=document.getElementById('svc-types-list');
-  el.innerHTML=svcTypes.map((t,i)=>`<div class="svc-type-chip">${t}<button onclick="removeSvcType(${i})" title="Remove"><i class="ti ti-x"></i></button></div>`).join('');
+  if(!el)return;
+  el.innerHTML=svcTypes.map((t,i)=>`<div class="svc-type-chip" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;display:inline-flex;align-items:center;gap:8px;padding:6px 14px;margin:3px;font-size:13px;color:var(--text2)">${t}<button onclick="removeSvcType(${i})" title="Remove ${t}" style="background:none;border:none;color:var(--text3);cursor:pointer;display:flex;align-items:center;padding:0;font-size:15px;line-height:1;transition:color 0.15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'"><i class="ti ti-x"></i></button></div>`).join('');
+  // Also refresh the dropdown in any open modal
+  const sel=document.getElementById('f-stype');
+  if(sel&&sel.tagName==='SELECT'){
+    const cur=sel.value;
+    sel.innerHTML=svcTypes.map(t=>`<option value="${t}" ${t===cur?'selected':''}>${t}</option>`).join('');
+  }
 }
 window.addSvcType=function(){
   const inp=document.getElementById('new-svc-type');
@@ -1083,9 +1094,16 @@ window.addSvcType=function(){
   inp.value='';renderServiceTypes();showToast('Service type added!');
 }
 window.removeSvcType=function(i){
+  if(!confirm('Remove "'+svcTypes[i]+'"?'))return;
   svcTypes.splice(i,1);
   localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
   renderServiceTypes();showToast('Removed');
+}
+window.resetSvcTypes=function(){
+  if(!confirm('Reset to default 27 service types? Your custom ones will be lost.'))return;
+  svcTypes=[...DEFAULT_SVC_TYPES];
+  localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
+  renderServiceTypes();showToast('Reset to defaults!');
 }
 
 // ── TOKEN ALERTS ──────────────────────────────────────────────────
@@ -1254,13 +1272,14 @@ window.showModal=function(type,data={}){
   }
 
   else if(type==='service'){
+    const svcOptions=svcTypes.map(t=>`<option value="${t}">${t}</option>`).join('');
     html=`<div class="modal-head"><h2>Log Service</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
       <div class="form-group span-2"><label>Car</label>
         <select id="f-car-id">${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
-      <div class="form-group"><label>Service Type</label><div class="ac-wrap"><input id="f-stype" placeholder="Oil Change…" oninput="acShow('f-stype',svcTypes)"/><div class="ac-list" id="ac-f-stype"></div></div></div>
+      <div class="form-group"><label>Service Type</label><select id="f-stype">${svcOptions}</select><span class="input-hint">Can't find it? Go to Service Types in the sidebar to add more</span></div>
       <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500"/></div>
       <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
       <div class="form-group span-2"><label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— you decide</span></label><input id="f-next-odo" type="number" placeholder="53000"/><span class="input-hint">Enter the odometer reading when next service should be done</span></div>
