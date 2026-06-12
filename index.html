@@ -370,6 +370,10 @@ window.FIREBASE_CONFIG = {
           <button class="btn btn-primary" onclick="showModal('car')"><i class="ti ti-plus"></i>Add Car</button>
         </div>
       </div>
+      <!-- Car Filter Tabs -->
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" id="dash-car-filter">
+        <button class="tab-btn active" onclick="setDashCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>
+      </div>
       <div id="token-alerts-dash"></div>
       <div class="metrics" id="dash-metrics">
         <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-car"></i>Total Cars</div><div class="m-val blue" id="dm-cars">—</div><div class="m-sub" id="dm-cars-sub">loading</div></div>
@@ -625,6 +629,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstati
 let db=null, storage=null;
 let cars=[], fuelLogs=[], serviceLogs=[], fuelPrices=[];
 let carsFilter='all';
+let dashCarId=null; // null = all cars
 let chartInstances={};
 let DEFAULT_SVC_TYPES=['Oil Change','Oil Filter Change','Air Filter Change','Fuel Filter Change','Spark Plugs Change','Transmission Oil Change','Coolant / Radiator Flush','Engine Tune-up','Tyre Puncture Repair','Tyre Rotation','Tyre Balancing','Wheel Alignment','Tyre Replacement','Brake Pads Change','Brake Disc Change','Brake Oil Change','AC Filter Change','AC Gas Refill','AC Service / Cleaning','Battery Change','Battery Terminals Cleaning','Car Wash / Detailing','Windshield Wiper Change','Headlight / Bulb Change','Suspension Check','Steering Oil Change','General Inspection'];
 let svcTypes = JSON.parse(localStorage.getItem('fl_svc_types')||JSON.stringify(DEFAULT_SVC_TYPES));
@@ -759,27 +764,56 @@ function renderAll(){
   renderServiceTypes();renderNotifications();renderReminders();renderCharts();checkTokenAlerts();
 }
 
+// ── DASHBOARD CAR FILTER ─────────────────────────────────────────
+window.setDashCar=function(carId, btn){
+  dashCarId=carId;
+  document.querySelectorAll('#dash-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderDashboard();
+}
+
+function buildDashCarFilter(){
+  const wrap=document.getElementById('dash-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(dashCarId===null?'active':'')+'" onclick="setDashCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(dashCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setDashCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+
 // ── DASHBOARD ─────────────────────────────────────────────────────
 function renderDashboard(){
-  const owned=cars.filter(c=>c.status==='owned').length;
-  const sold=cars.filter(c=>c.status==='sold').length;
-  document.getElementById('dm-cars').textContent=cars.length;
-  document.getElementById('dm-cars-sub').textContent=`${owned} owned · ${sold} sold`;
-  document.getElementById('dash-sub').textContent=`${cars.length} vehicle${cars.length!==1?'s':''} tracked`;
+  buildDashCarFilter();
+  // Filter data based on selected car
+  const filteredCars=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
+  const filteredFuel=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const filteredSvc=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
+  const selectedCar=dashCarId?cars.find(c=>c.id===dashCarId):null;
 
-  const fullFills=fuelLogs.filter(f=>f.fillType==='full'&&f.kmpl>0);
+  const owned=filteredCars.filter(c=>c.status==='owned').length;
+  const sold=filteredCars.filter(c=>c.status==='sold').length;
+  document.getElementById('dm-cars').textContent=filteredCars.length;
+  document.getElementById('dm-cars-sub').textContent=`${owned} owned · ${sold} sold`;
+  document.getElementById('dash-sub').textContent=selectedCar?`${selectedCar.make} ${selectedCar.model} ${selectedCar.year||''}`:`${cars.length} vehicle${cars.length!==1?'s':''} tracked`;
+
+  const fullFills=filteredFuel.filter(f=>f.fillType==='full'&&f.kmpl>0);
   const avg=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):'—';
   document.getElementById('dm-avg').textContent=avg==='—'?'—':avg;
 
   let totalPL=0;
-  cars.filter(c=>c.status==='sold'&&c.soldAt&&c.boughtAt).forEach(c=>{
+  filteredCars.filter(c=>c.status==='sold'&&c.soldAt&&c.boughtAt).forEach(c=>{
     totalPL+=(parseFloat(c.soldAt)||0)-(parseFloat(c.boughtAt)||0);
   });
   const plEl=document.getElementById('dm-pl');
   plEl.textContent=totalPL===0?'PKR 0':(totalPL>0?'+':'')+fmtPKR(totalPL);
   plEl.className='m-val '+(totalPL>0?'green':totalPL<0?'red':'');
 
-  const alerts=serviceLogs.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').length;
+  const alerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').length;
   document.getElementById('dm-alerts').textContent=alerts;
   const badge=document.getElementById('svc-badge');
   badge.style.display=alerts>0?'inline':'none';
@@ -793,12 +827,12 @@ function renderDashboard(){
 
   // Monthly cost this month
   const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const monthFuel=fuelLogs.filter(f=>f.date&&f.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const monthSvc=serviceLogs.filter(s=>s.date&&s.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const monthFuel=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const monthSvc=filteredSvc.filter(s=>s.date&&s.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
   document.getElementById('dm-monthly').textContent=fmtPKR(monthFuel+monthSvc);
 
-  renderCarCards('dash-cars',cars.slice(0,6));
-  const svcAlerts=serviceLogs.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
+  renderCarCards('dash-cars',filteredCars.slice(0,6));
+  const svcAlerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
   renderSvcAlerts('dash-services',svcAlerts);
 }
 
@@ -1144,41 +1178,55 @@ window.removeSvcType=function(i){
 window.showOdoModal=function(carId){showModal('odo',{carId});}
 
 // ── NEXT DUE CALCULATOR ───────────────────────────────────────────
-window.calcNextDue=function(inp){
-  const val=inp.value.trim();
+window.syncNextDueBase=function(){
+  // Called when car selection or odo-at-service changes
+  const baseEl=document.getElementById('f-next-odo-base');
+  if(!baseEl)return;
+  const odoEl=document.getElementById('f-odo3');
+  const carId=document.getElementById('f-car-id')?.value;
+  // Priority: odometer at service field > car current odometer
+  const svcOdo=parseFloat(odoEl?.value)||0;
+  const car=cars.find(c=>c.id===carId);
+  const carOdo=parseFloat(car?.odometer||0);
+  const base=svcOdo||carOdo||0;
+  baseEl.value=base||'';
+  calcNextDue(); // recalculate if interval already entered
+}
+window.calcNextDue=function(){
+  const baseEl=document.getElementById('f-next-odo-base');
+  const intervalEl=document.getElementById('f-next-odo-interval');
+  const hiddenEl=document.getElementById('f-next-odo');
   const resultBox=document.getElementById('f-next-odo-result');
   const calcSpan=document.getElementById('f-next-odo-calc');
-  const hint=document.getElementById('f-next-odo-hint');
-  if(val.startsWith('+')){
-    const interval=parseFloat(val.slice(1))||0;
-    const carId=document.getElementById('f-car-id')?.value;
-    const car=cars.find(c=>c.id===carId);
-    const odo=parseFloat(car?.odometer||0);
-    if(interval>0&&odo>0){
-      const result=odo+interval;
-      inp.dataset.computed=result;
-      if(calcSpan)calcSpan.textContent=odo.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
-      if(resultBox)resultBox.style.display='block';
-      if(hint)hint.textContent='Click the result above to fill it in';
-    } else {
-      if(resultBox)resultBox.style.display='none';
-      if(hint)hint.textContent='Select a car first so we know its current odometer';
-    }
+  if(!baseEl||!intervalEl)return;
+  const base=parseFloat(baseEl.value)||0;
+  const interval=parseFloat(intervalEl.value)||0;
+  if(base>0&&interval>0){
+    const result=base+interval;
+    if(calcSpan)calcSpan.textContent=base.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
+    if(resultBox)resultBox.style.display='block';
+    // Store computed but dont auto fill yet
+    if(hiddenEl)hiddenEl.dataset.computed=result;
   } else {
-    inp.dataset.computed='';
     if(resultBox)resultBox.style.display='none';
-    if(hint)hint.textContent='Tip: type +5000 to calculate next due from current odometer';
+    if(hiddenEl)hiddenEl.dataset.computed='';
   }
 }
 window.fillNextDue=function(){
-  const inp=document.getElementById('f-next-odo');
+  const hiddenEl=document.getElementById('f-next-odo');
   const resultBox=document.getElementById('f-next-odo-result');
   const hint=document.getElementById('f-next-odo-hint');
-  if(inp&&inp.dataset.computed){
-    inp.value=inp.dataset.computed;
-    inp.dataset.computed='';
-    if(resultBox)resultBox.style.display='none';
-    if(hint)hint.textContent='✅ Filled! You can still edit this number manually.';
+  const calcSpan=document.getElementById('f-next-odo-calc');
+  const computed=hiddenEl?.dataset.computed;
+  if(computed){
+    if(hiddenEl)hiddenEl.value=computed;
+    // Update result box to show confirmed state
+    if(resultBox){
+      resultBox.style.background='rgba(74,222,128,0.15)';
+      resultBox.style.borderColor='rgba(74,222,128,0.6)';
+    }
+    if(calcSpan)calcSpan.textContent=parseFloat(computed).toLocaleString()+' KM ✅ Confirmed';
+    if(hint)hint.textContent='Next due set to '+parseFloat(computed).toLocaleString()+' KM. Click again to change.';
   }
 }
 
@@ -1497,22 +1545,29 @@ window.showModal=function(type,data={}){
     html=`<div class="modal-head"><h2>Log Service</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
       <div class="form-group span-2"><label>Car</label>
-        <select id="f-car-id">${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
+        <select id="f-car-id" onchange="syncNextDueBase()">${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
       <div class="form-group"><label>Service Type</label><select id="f-stype" onchange="checkSvcTypeSelect(this)">${svcOptions}<option disabled>──────────────</option><option value="__manage__">⚙️ Add / Remove Service Types...</option></select><span class="input-hint">Select a service or manage your list at the bottom</span></div>
       <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500"/></div>
-      <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
+      <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000" oninput="syncNextDueBase()"/></div>
       <div class="form-group span-2"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, Filter House…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
       <div class="form-group span-2">
-        <label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— type full number OR type +5000 to add interval</span></label>
-        <input id="f-next-odo" placeholder="39218 or +5000" oninput="calcNextDue(this)"/>
-        <div id="f-next-odo-result" style="display:none;margin-top:6px;background:var(--gold-bg);border:1px solid rgba(232,196,74,0.3);border-radius:8px;padding:10px 14px;cursor:pointer;transition:background 0.15s" onclick="fillNextDue()" title="Click to use this value">
-          <span style="font-size:12px;color:var(--text3)">Calculated result — click to use:</span><br/>
-          <span id="f-next-odo-calc" style="font-size:16px;font-weight:700;color:var(--gold)"></span>
-          <span style="font-size:12px;color:var(--text3);margin-left:8px">👆 tap to fill</span>
+        <label>Next Due Odometer (KM)</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="f-next-odo-base" type="number" style="flex:1;background:var(--bg4);color:var(--text3);cursor:default" readonly placeholder="Auto from odometer"/>
+          <span style="color:var(--text3);font-size:18px;font-weight:700;flex-shrink:0">+</span>
+          <input id="f-next-odo-interval" type="number" style="flex:1" placeholder="5000" oninput="calcNextDue()"/>
         </div>
-        <span class="input-hint" id="f-next-odo-hint">Tip: type +5000 to calculate next due from current odometer</span>
+        <div id="f-next-odo-result" style="display:none;margin-top:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:12px 16px;cursor:pointer;transition:all 0.15s" onclick="fillNextDue()">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Calculated result — click to confirm:</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="f-next-odo-calc" style="font-size:18px;font-weight:700;color:var(--green)"></span>
+            <span style="font-size:12px;color:var(--green);opacity:0.7">✅ tap to use this</span>
+          </div>
+        </div>
+        <input type="hidden" id="f-next-odo"/>
+        <span class="input-hint" id="f-next-odo-hint">Left field = odometer at service (auto-filled). Right field = your service interval in KM.</span>
       </div>
       <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…"></textarea></div>
       <div class="form-group span-2"><label>Receipt Photo (optional)</label>
@@ -1635,12 +1690,17 @@ window.saveService=async function(){
   const odo=n('f-odo3');
   // Handle +interval next due
   const nextDueRaw=document.getElementById('f-next-odo')?.value?.trim()||'';
+  // Get next due from hidden field (set via fillNextDue) or computed value
+  const hiddenNextDue=document.getElementById('f-next-odo');
+  const computedVal=hiddenNextDue?.dataset.computed;
+  const intervalVal=parseFloat(document.getElementById('f-next-odo-interval')?.value)||0;
+  const baseVal=parseFloat(document.getElementById('f-next-odo-base')?.value)||0;
   let nextDueOdo=0;
-  if(nextDueRaw.startsWith('+')){
-    const car2=cars.find(c=>c.id===carId);
-    const curOdo=parseFloat(car2?.odometer||odo||0);
-    nextDueOdo=curOdo+(parseFloat(nextDueRaw.slice(1))||0);
-  } else {
+  if(computedVal&&parseFloat(computedVal)>0){
+    nextDueOdo=parseFloat(computedVal);
+  } else if(baseVal>0&&intervalVal>0){
+    nextDueOdo=baseVal+intervalVal; // use computed even if not confirmed
+  } else if(nextDueRaw&&!isNaN(nextDueRaw)){
     nextDueOdo=parseFloat(nextDueRaw)||0;
   }
   await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),notes:v('f-notes'),receiptUrl,status:'ok'});
