@@ -28,7 +28,7 @@
   --purple:#a78bfa;--purple-bg:rgba(167,139,250,0.1);
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
   --sidebar-w:240px;--topbar-h:56px;
-  --font:'Syne',sans-serif;--mono:'DM Mono',monospace;
+  --font:'Syne',sans-serif;--mono:'Segoe UI',system-ui,sans-serif;
 }
 .light-mode{
   --bg:#f4f4f8;--bg2:#ffffff;--bg3:#eeeef4;--bg4:#e4e4ee;--bg5:#d8d8e8;
@@ -351,6 +351,7 @@ window.FIREBASE_CONFIG = {
     <div class="nav-item" data-page="fuel-prices"><i class="ti ti-gas-station"></i>Fuel Prices</div>
     <span class="nav-label">Settings</span>
     <div class="nav-item" data-page="svc-types"><i class="ti ti-list"></i>Service Types</div>
+    <div class="nav-item" data-page="reminders"><i class="ti ti-bell-ringing"></i>Reminders<span class="nav-badge" id="rem-badge" style="display:none">0</span></div>
     <div class="nav-item" data-page="settings"><i class="ti ti-settings"></i>Settings</div>
     <div class="nav-spacer"></div>
     <div class="nav-version">FleetLedger v2.0</div>
@@ -382,7 +383,18 @@ window.FIREBASE_CONFIG = {
         <div class="chart-panel"><div class="section-head"><h2>Monthly Fuel Spend (PKR)</h2></div><canvas id="chart-monthly"></canvas></div>
       </div>
       <div><div class="section-head"><h2>My Fleet</h2><a onclick="showPage('cars')">View all →</a></div><div class="car-cards" id="dash-cars" style="margin-top:12px"></div></div>
-      <div><div class="section-head"><h2>Service Alerts</h2><a onclick="showPage('service')">View all →</a></div><div class="service-list" id="dash-services" style="margin-top:10px"></div></div>
+      <div>
+        <div class="section-head"><h2>Service Alerts</h2><a onclick="showPage('reminders')">View all →</a></div>
+        <div class="service-list" id="dash-services" style="margin-top:10px"></div>
+      </div>
+      <div>
+        <div class="section-head"><h2>Service Progress</h2><a onclick="showPage('reminders')">Full view →</a></div>
+        <div id="dash-svc-progress" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head"><h2>Service Timeline</h2></div>
+        <canvas id="chart-svc-timeline" style="max-height:200px;margin-top:10px"></canvas>
+      </div>
     </div>
 
     <!-- ── MY CARS ── -->
@@ -406,7 +418,8 @@ window.FIREBASE_CONFIG = {
       <div class="ph">
         <div class="ph-left"><h1>Fuel Log</h1><p>Fill-up history &amp; KM/L tracking</p></div>
         <div class="ph-right">
-          <button class="btn btn-secondary" onclick="exportFuelLog()"><i class="ti ti-download"></i>Export</button>
+          <button class="btn btn-secondary" onclick="exportFuelLog()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+          <button class="btn btn-secondary" onclick="exportFuelLogPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
           <button class="btn btn-primary" onclick="showModal('fuel')"><i class="ti ti-plus"></i>Log Fill-up</button>
         </div>
       </div>
@@ -427,7 +440,8 @@ window.FIREBASE_CONFIG = {
       <div class="ph">
         <div class="ph-left"><h1>Service Log</h1><p>Maintenance records &amp; due dates</p></div>
         <div class="ph-right">
-          <button class="btn btn-secondary" onclick="exportServiceLog()"><i class="ti ti-download"></i>Export</button>
+          <button class="btn btn-secondary" onclick="exportServiceLog()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+          <button class="btn btn-secondary" onclick="exportServiceLogPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
           <button class="btn btn-primary" onclick="showModal('service')"><i class="ti ti-plus"></i>Log Service</button>
         </div>
       </div>
@@ -527,6 +541,30 @@ window.FIREBASE_CONFIG = {
       </div>
     </div>
 
+    <!-- ── REMINDERS ── -->
+    <div class="page" id="page-reminders">
+      <div class="ph">
+        <div class="ph-left"><h1>Reminders</h1><p>Upcoming &amp; overdue services</p></div>
+        <div class="ph-right"><button class="btn btn-secondary" onclick="exportReminders()"><i class="ti ti-download"></i>Export PDF</button></div>
+      </div>
+      <div id="rem-overdue-section">
+        <div class="section-head"><h2 style="color:var(--red)">🔴 Overdue</h2></div>
+        <div class="service-list" id="rem-overdue" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px" id="rem-upcoming-section">
+        <div class="section-head"><h2 style="color:var(--amber)">⚠️ Due Soon</h2></div>
+        <div class="service-list" id="rem-due-soon" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="section-head"><h2 style="color:var(--green)">✅ OK</h2></div>
+        <div class="service-list" id="rem-ok" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="section-head"><h2>📊 Service Progress</h2></div>
+        <div id="rem-progress" style="margin-top:10px;display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
+
     <!-- ── NOTIFICATIONS ── -->
     <div class="page" id="page-notifications">
       <div class="ph"><div class="ph-left"><h1>Alerts &amp; Reminders</h1><p>Service due, token expiry &amp; more</p></div></div>
@@ -564,6 +602,7 @@ window.FIREBASE_CONFIG = {
     <div class="mob-nav-item" data-page="cars"><i class="ti ti-car"></i>Cars</div>
     <div class="mob-nav-item" data-page="fuel-log"><i class="ti ti-droplet"></i>Fuel</div>
     <div class="mob-nav-item" data-page="service"><i class="ti ti-tool"></i>Service</div>
+    <div class="mob-nav-item" data-page="reminders"><i class="ti ti-bell-ringing"></i>Alerts</div>
     <div class="mob-nav-item" data-page="fuel-prices"><i class="ti ti-gas-station"></i>Prices</div>
   </div>
 </div>
@@ -716,7 +755,7 @@ async function uploadPhoto(file,path){
 function renderAll(){
   renderDashboard();renderCarList();renderFuelLog();renderServiceLog();
   renderPL();renderInstallments();renderFuelPrices();renderInsights();
-  renderServiceTypes();renderNotifications();renderCharts();checkTokenAlerts();
+  renderServiceTypes();renderNotifications();renderReminders();renderCharts();checkTokenAlerts();
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
@@ -808,6 +847,7 @@ function renderCarCards(elId,list){
       ${c.status!=='sold'?`<div class="car-card-footer">
         <button class="action-chip" onclick="event.stopPropagation();showModal('fuel',{carId:'${c.id}'})"><i class="ti ti-droplet"></i>Fill-up</button>
         <button class="action-chip" onclick="event.stopPropagation();showModal('service',{carId:'${c.id}'})"><i class="ti ti-tool"></i>Service</button>
+        <button class="action-chip" onclick="event.stopPropagation();showModal('odo',{carId:'${c.id}'})"><i class="ti ti-road"></i>ODO</button>
         <button class="action-chip" onclick="event.stopPropagation();showModal('sell',{carId:'${c.id}'})"><i class="ti ti-tag"></i>Sell</button>
         <button class="action-chip" onclick="event.stopPropagation();showModal('car',cars.find(x=>x.id==='${c.id}'))"><i class="ti ti-edit"></i>Edit</button>
       </div>`:''}
@@ -1099,6 +1139,152 @@ window.removeSvcType=function(i){
   localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
   renderServiceTypes();showToast('Removed');
 }
+// ── ODOMETER QUICK UPDATE ─────────────────────────────────────────
+window.showOdoModal=function(carId){showModal('odo',{carId});}
+
+// ── NEXT DUE CALCULATOR ───────────────────────────────────────────
+window.calcNextDue=function(inp){
+  const val=inp.value.trim();
+  const hint=document.getElementById('f-next-odo-hint');
+  if(val.startsWith('+')){
+    const interval=parseFloat(val.slice(1))||0;
+    const carId=document.getElementById('f-car-id')?.value;
+    const car=cars.find(c=>c.id===carId);
+    const odo=parseFloat(car?.odometer||0);
+    if(interval>0&&odo>0){
+      const result=odo+interval;
+      inp.dataset.computed=result;
+      if(hint)hint.textContent='= '+odo.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
+    }
+  } else {
+    inp.dataset.computed='';
+    if(hint)hint.textContent='Tip: type +5000 to auto-add 5,000 KM to current odometer';
+  }
+}
+
+// ── SERVICE STATION AUTOCOMPLETE ─────────────────────────────────
+function getSvcStations(){return[...new Set(serviceLogs.map(s=>s.station).filter(Boolean))];}
+
+// ── RENDER REMINDERS PAGE ─────────────────────────────────────────
+function renderReminders(){
+  const latest={}; // keep only latest service per car+type
+  [...serviceLogs].reverse().forEach(s=>{
+    const key=s.carId+'__'+s.type;
+    if(!latest[key])latest[key]=s;
+  });
+  const all=Object.values(latest);
+  const overdue=all.filter(s=>svcStatus(s)==='overdue');
+  const dueSoon=all.filter(s=>svcStatus(s)==='due-soon');
+  const ok=all.filter(s=>svcStatus(s)==='ok');
+
+  // Update badge
+  const total=overdue.length+dueSoon.length;
+  const badge=document.getElementById('rem-badge');
+  if(badge){badge.style.display=total>0?'inline':'none';badge.textContent=total;}
+
+  renderReminderList('rem-overdue', overdue, 'overdue');
+  renderReminderList('rem-due-soon', dueSoon, 'due-soon');
+  renderReminderList('rem-ok', ok, 'ok');
+  renderSvcProgress('rem-progress');
+  renderSvcProgress('dash-svc-progress');
+  renderSvcTimeline();
+}
+
+function renderReminderList(elId, list, status){
+  const el=document.getElementById(elId); if(!el)return;
+  if(!list.length){el.innerHTML=`<div style="padding:14px 16px;font-size:13px;color:var(--text3)">None</div>`;return;}
+  el.innerHTML=list.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    const col=status==='overdue'?'red':status==='due-soon'?'amber':'green';
+    return`<div class="service-item" style="${status==='overdue'?'border-color:rgba(248,113,113,0.3);':''}">
+      <div class="svc-icon ${col}"><i class="ti ti-tool"></i></div>
+      <div class="svc-main">
+        <h4>${car?car.make+' '+car.model:'Unknown'} — ${s.type}</h4>
+        <p>${s.station?'📍 '+s.station+' · ':''} Last: ${s.date}${ds!==null?' ('+ds+' days ago)':''}</p>
+      </div>
+      <div class="svc-right">
+        <div class="due" style="color:var(--${col})">${kl===null?'—':kl<0?'Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</div>
+        <div class="days">${s.nextDueOdo?'Due at '+parseFloat(s.nextDueOdo).toLocaleString()+' KM':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSvcProgress(elId){
+  const el=document.getElementById(elId); if(!el)return;
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const all=Object.values(latest).filter(s=>s.nextDueOdo&&s.odometer);
+  if(!all.length){el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:10px">No service records with odometer data yet.</div>`;return;}
+  el.innerHTML=all.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const done=parseFloat(s.odometer)||0;
+    const due=parseFloat(s.nextDueOdo)||0;
+    const cur=parseFloat(car?.odometer||done);
+    const total=due-done; if(total<=0)return'';
+    const used=cur-done;
+    const pct=Math.min(100,Math.max(0,(used/total)*100));
+    const kl=due-cur;
+    const st=svcStatus(s);
+    const col=st==='overdue'?'var(--red)':st==='due-soon'?'var(--amber)':'var(--green)';
+    return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;${st==='overdue'?'border-color:rgba(248,113,113,0.4)':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <span style="font-size:13px;font-weight:600">${car?car.make+' '+car.model:'?'}</span>
+          <span style="font-size:12px;color:var(--text3);margin-left:8px">${s.type}</span>
+        </div>
+        <span style="font-size:12px;font-weight:600;color:${col}">${kl<0?'Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</span>
+      </div>
+      <div style="background:var(--bg4);border-radius:20px;height:8px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${col};border-radius:20px;transition:width 0.5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--text3)">
+        <span>${done.toLocaleString()} KM (last done)</span>
+        <span>${cur.toLocaleString()} KM (now)</span>
+        <span>${due.toLocaleString()} KM (due)</span>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+}
+
+function renderSvcTimeline(){
+  const d=chartDefaults();
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const all=Object.values(latest).filter(s=>s.nextDueOdo).slice(0,10);
+  if(!all.length)return;
+  const labels=all.map(s=>{const c=cars.find(x=>x.id===s.carId);return(c?c.make.slice(0,6):'')+' '+s.type.slice(0,12);});
+  const doneData=all.map(s=>parseFloat(s.odometer)||0);
+  const dueData=all.map(s=>parseFloat(s.nextDueOdo)||0);
+  const curData=all.map(s=>{const c=cars.find(x=>x.id===s.carId);return parseFloat(c?.odometer||0);});
+  mkChart('chart-svc-timeline',{type:'bar',data:{labels,datasets:[
+    {label:'Last Done (KM)',data:doneData,backgroundColor:'rgba(96,165,250,0.6)',borderRadius:4},
+    {label:'Current ODO (KM)',data:curData,backgroundColor:'rgba(251,191,36,0.6)',borderRadius:4},
+    {label:'Next Due (KM)',data:dueData,backgroundColor:'rgba(74,222,128,0.6)',borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}}});
+}
+
+// ── EXPORT REMINDERS PDF ──────────────────────────────────────────
+window.exportReminders=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(16);doc.text('FleetLedger — Service Reminders',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const rows=Object.values(latest).map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    return[car?`${car.make} ${car.model}`:'?',s.type,s.date,ds!==null?ds+' days':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue '+Math.abs(kl).toLocaleString()+'KM':kl.toLocaleString()+' KM',svcStatus(s).toUpperCase()];
+  });
+  doc.autoTable({startY:32,head:[['Car','Service','Last Date','Days Since','Next Due','KM Left','Status']],body:rows,styles:{fontSize:9},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]},didParseCell:function(data){if(data.section==='body'&&data.column.index===6){const v=data.cell.raw;if(v==='OVERDUE')data.cell.styles.textColor=[248,113,113];else if(v==='DUE-SOON')data.cell.styles.textColor=[251,191,36];else data.cell.styles.textColor=[74,222,128];}}});
+  doc.save('ServiceReminders_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
 window.checkSvcTypeSelect=function(sel){
   if(sel.value==='__manage__'){
     closeModal();
@@ -1289,13 +1475,29 @@ window.showModal=function(type,data={}){
       <div class="form-group"><label>Service Type</label><select id="f-stype" onchange="checkSvcTypeSelect(this)">${svcOptions}<option disabled>──────────────</option><option value="__manage__">⚙️ Add / Remove Service Types...</option></select><span class="input-hint">Select a service or manage your list at the bottom</span></div>
       <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500"/></div>
       <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000"/></div>
-      <div class="form-group span-2"><label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— you decide</span></label><input id="f-next-odo" type="number" placeholder="53000"/><span class="input-hint">Enter the odometer reading when next service should be done</span></div>
-      <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Workshop name, parts used…"></textarea></div>
+      <div class="form-group"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, PSO…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
+      <div class="form-group"><label>City / Area</label><input id="f-svc-city" placeholder="Lahore, DHA Phase 5…"/></div>
+      <div class="form-group span-2">
+        <label>Next Due Odometer (KM) <span style="color:var(--text3);font-size:10px">— type full number OR +interval e.g. +5000</span></label>
+        <input id="f-next-odo" placeholder="53000 or +5000" oninput="calcNextDue(this)"/>
+        <span class="input-hint" id="f-next-odo-hint">Tip: type +5000 to auto-add 5,000 KM to current odometer</span>
+      </div>
+      <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…"></textarea></div>
       <div class="form-group span-2"><label>Receipt Photo (optional)</label>
         <input type="file" id="f-receipt" accept="image/*" style="padding:6px"/>
       </div>
     </div></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveService()"><i class="ti ti-device-floppy"></i>Save</button></div>`;
+  }
+
+  else if(type==='odo'){
+    const car=cars.find(c=>c.id===data.carId);
+    html=`<div class="modal-head"><h2>Update Odometer — ${car?car.make+' '+car.model:''}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid cols-1">
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:13px;color:var(--text2);font-family:var(--mono)">Current: <strong style="color:var(--text);font-size:16px">${car?parseFloat(car.odometer||0).toLocaleString():0} KM</strong></div>
+      <div class="form-group"><label>New Odometer Reading (KM)</label><input id="f-new-odo" type="number" placeholder="${car?parseFloat(car.odometer||0)+500:0}"/><span class="input-hint">Enter the current reading from your dashboard</span></div>
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveOdo('${data.carId}')"><i class="ti ti-check"></i>Update</button></div>`;
   }
 
   else if(type==='sell'){
@@ -1380,6 +1582,15 @@ window.saveFuel=async function(){
   closeModal();showToast(fillType==='full'?'Full fill logged! KM/L calculated.':'Partial fill logged (estimate only).');
 }
 
+window.saveOdo=async function(carId){
+  const newOdo=n('f-new-odo');
+  if(!newOdo){showToast('Enter odometer reading','error');return;}
+  const car=cars.find(c=>c.id===carId);
+  if(car&&newOdo<parseFloat(car.odometer||0)){showToast('New reading cannot be less than current','error');return;}
+  await updateRec('cars',carId,{odometer:newOdo});
+  closeModal();showToast('Odometer updated! Service progress recalculated.');
+}
+
 window.saveService=async function(){
   const carId=v('f-car-id');
   if(!carId){showToast('Select a car','error');return;}
@@ -1390,7 +1601,17 @@ window.saveService=async function(){
     receiptUrl=await uploadPhoto(receiptFile,`receipts/${carId}_${Date.now()}`);
   }
   const odo=n('f-odo3');
-  await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo:n('f-next-odo'),notes:v('f-notes'),receiptUrl,status:'ok'});
+  // Handle +interval next due
+  const nextDueRaw=document.getElementById('f-next-odo')?.value?.trim()||'';
+  let nextDueOdo=0;
+  if(nextDueRaw.startsWith('+')){
+    const car2=cars.find(c=>c.id===carId);
+    const curOdo=parseFloat(car2?.odometer||odo||0);
+    nextDueOdo=curOdo+(parseFloat(nextDueRaw.slice(1))||0);
+  } else {
+    nextDueOdo=parseFloat(nextDueRaw)||0;
+  }
+  await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),city:v('f-svc-city'),notes:v('f-notes'),receiptUrl,status:'ok'});
   if(odo)await updateRec('cars',carId,{odometer:odo});
   closeModal();showToast('Service logged!');
 }
@@ -1482,6 +1703,28 @@ window.exportAll=function(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(fpData),'Fuel Prices');
   XLSX.writeFile(wb,'FleetLedger_Export_'+new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Excel exported!');
+}
+
+window.exportFuelLogPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF('l');
+  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const rows=fuelLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`:'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
+  doc.autoTable({startY:32,head:[['Date','Car','Station','Type','Litres','PKR/L','Total','ODO','Distance','KM/L']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]}});
+  doc.save('FuelLog_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
+window.exportServiceLogPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF('l');
+  doc.setFontSize(16);doc.text('FleetLedger — Service Log',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const rows=serviceLogs.map(s=>{const c=cars.find(x=>x.id===s.carId);const kl=kmLeft(s);const ds=daysSince(s.date);return[s.date,c?`${c.make} ${c.model}`:'',s.type,s.station||'—',s.cost?'₨'+parseFloat(s.cost).toLocaleString():'—',s.odometer?parseFloat(s.odometer).toLocaleString()+' KM':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue':kl.toLocaleString()+' KM',ds!==null?ds+' days':'—',svcStatus(s).toUpperCase()];});
+  doc.autoTable({startY:32,head:[['Date','Car','Service','Station','Cost','ODO','Next Due','KM Left','Days Since','Status']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]},didParseCell:function(data){if(data.section==='body'&&data.column.index===9){const v=data.cell.raw;if(v==='OVERDUE')data.cell.styles.textColor=[248,113,113];else if(v==='DUE-SOON')data.cell.styles.textColor=[251,191,36];else data.cell.styles.textColor=[74,222,128];}}});
+  doc.save('ServiceLog_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
 }
 
 window.exportFuelLog=function(){
