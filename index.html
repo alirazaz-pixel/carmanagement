@@ -1333,55 +1333,54 @@ window.showOdoModal=function(carId){showModal('odo',{carId});}
 
 // ── NEXT DUE CALCULATOR ───────────────────────────────────────────
 window.syncNextDueBase=function(){
-  // Called when car selection or odo-at-service changes
-  const baseEl=document.getElementById('f-next-odo-base');
-  if(!baseEl)return;
-  const odoEl=document.getElementById('f-odo3');
-  const carId=document.getElementById('f-car-id')?.value;
-  // Priority: odometer at service field > car current odometer
-  const svcOdo=parseFloat(odoEl?.value)||0;
-  const car=cars.find(c=>c.id===carId);
-  const carOdo=parseFloat(car?.odometer||0);
-  const base=svcOdo||carOdo||0;
-  baseEl.value=base||'';
-  calcNextDue(); // recalculate if interval already entered
+  // When car or service odo changes, we don't auto-fill anymore
+  // Just recalculate if user already typed something
+  calcNextDue();
 }
 window.calcNextDue=function(){
-  const baseEl=document.getElementById('f-next-odo-base');
-  const intervalEl=document.getElementById('f-next-odo-interval');
-  const hiddenEl=document.getElementById('f-next-odo');
+  const inp=document.getElementById('f-next-odo');
   const resultBox=document.getElementById('f-next-odo-result');
   const calcSpan=document.getElementById('f-next-odo-calc');
-  if(!baseEl||!intervalEl)return;
-  const base=parseFloat(baseEl.value)||0;
-  const interval=parseFloat(intervalEl.value)||0;
-  if(base>0&&interval>0){
-    const result=base+interval;
-    if(calcSpan)calcSpan.textContent=base.toLocaleString()+' + '+interval.toLocaleString()+' = '+result.toLocaleString()+' KM';
-    if(resultBox)resultBox.style.display='block';
-    // Store computed but dont auto fill yet
-    if(hiddenEl)hiddenEl.dataset.computed=result;
-  } else {
+  const hint=document.getElementById('f-next-odo-hint');
+  if(!inp)return;
+  const raw=inp.value.trim();
+  if(!raw){if(resultBox)resultBox.style.display='none';return;}
+  // Try to evaluate expression like "34218 + 5000" or "39218"
+  try {
+    // Only allow safe math: digits, spaces, +, -, *, /
+    if(!/^[\d\s\+\-\*\/\.]+$/.test(raw)){
+      if(resultBox)resultBox.style.display='none';return;
+    }
+    const result=Function('"use strict";return ('+raw+')')();
+    if(isNaN(result)||result<=0){if(resultBox)resultBox.style.display='none';return;}
+    const rounded=Math.round(result);
+    inp.dataset.computed=rounded;
+    // Only show result box if it's an expression (contains operator)
+    if(/[\+\-\*\/]/.test(raw)){
+      if(calcSpan)calcSpan.textContent=rounded.toLocaleString();
+      if(resultBox)resultBox.style.display='block';
+      if(hint)hint.textContent='Press Enter or tap the result to use '+rounded.toLocaleString()+' KM';
+    } else {
+      // Plain number typed — just store it, no result box needed
+      inp.dataset.computed=rounded;
+      if(resultBox)resultBox.style.display='none';
+      if(hint)hint.textContent='Type a number directly, or calculate e.g. 34218 + 5000. Press Enter to confirm.';
+    }
+  } catch(e){
     if(resultBox)resultBox.style.display='none';
-    if(hiddenEl)hiddenEl.dataset.computed='';
   }
 }
 window.fillNextDue=function(){
-  const hiddenEl=document.getElementById('f-next-odo');
+  const inp=document.getElementById('f-next-odo');
   const resultBox=document.getElementById('f-next-odo-result');
   const hint=document.getElementById('f-next-odo-hint');
-  const calcSpan=document.getElementById('f-next-odo-calc');
-  const computed=hiddenEl?.dataset.computed;
-  if(computed){
-    if(hiddenEl)hiddenEl.value=computed;
-    // Update result box to show confirmed state
-    if(resultBox){
-      resultBox.style.background='rgba(74,222,128,0.15)';
-      resultBox.style.borderColor='rgba(74,222,128,0.6)';
-    }
-    if(calcSpan)calcSpan.textContent=parseFloat(computed).toLocaleString()+' KM ✅ Confirmed';
-    if(hint)hint.textContent='Next due set to '+parseFloat(computed).toLocaleString()+' KM. Click again to change.';
-  }
+  const computed=inp?.dataset.computed;
+  if(!computed)return;
+  // Replace expression with clean number
+  inp.value=computed;
+  inp.dataset.computed=computed;
+  if(resultBox)resultBox.style.display='none';
+  if(hint)hint.textContent='✅ Set to '+parseFloat(computed).toLocaleString()+' KM';
 }
 
 // ── SERVICE STATION AUTOCOMPLETE ─────────────────────────────────
@@ -1709,20 +1708,13 @@ window.showModal=function(type,data={}){
       <div class="form-group span-2"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, Filter House…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
       <div class="form-group span-2">
         <label>Next Due Odometer (KM)</label>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="f-next-odo-base" type="number" style="flex:1;background:var(--bg4);color:var(--text3);cursor:default" readonly placeholder="Auto from odometer"/>
-          <span style="color:var(--text3);font-size:18px;font-weight:700;flex-shrink:0">+</span>
-          <input id="f-next-odo-interval" type="number" style="flex:1" placeholder="5000" oninput="calcNextDue()"/>
+        <input id="f-next-odo" placeholder="e.g. 39218  or  34218 + 5000" oninput="calcNextDue()" onkeydown="if(event.key==='Enter'){event.preventDefault();fillNextDue();}"/>
+        <div id="f-next-odo-result" style="display:none;margin-top:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 16px;cursor:pointer" onclick="fillNextDue()">
+          <span style="font-size:12px;color:var(--text3)">= </span>
+          <span id="f-next-odo-calc" style="font-size:20px;font-weight:700;color:var(--green)"></span>
+          <span style="font-size:12px;color:var(--green);margin-left:10px">KM — press Enter or tap to use</span>
         </div>
-        <div id="f-next-odo-result" style="display:none;margin-top:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:12px 16px;cursor:pointer;transition:all 0.15s" onclick="fillNextDue()">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Calculated result — click to confirm:</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span id="f-next-odo-calc" style="font-size:18px;font-weight:700;color:var(--green)"></span>
-            <span style="font-size:12px;color:var(--green);opacity:0.7">✅ tap to use this</span>
-          </div>
-        </div>
-        <input type="hidden" id="f-next-odo"/>
-        <span class="input-hint" id="f-next-odo-hint">Left field = odometer at service (auto-filled). Right field = your service interval in KM.</span>
+        <span class="input-hint" id="f-next-odo-hint">Type a number directly, or calculate e.g. 34218 + 5000. Press Enter to confirm.</span>
       </div>
       <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…"></textarea></div>
       <div class="form-group span-2"><label>Receipt Photo (optional)</label>
@@ -1845,17 +1837,13 @@ window.saveService=async function(){
   const odo=n('f-odo3');
   // Handle +interval next due
   const nextDueRaw=document.getElementById('f-next-odo')?.value?.trim()||'';
-  // Get next due from hidden field (set via fillNextDue) or computed value
-  const hiddenNextDue=document.getElementById('f-next-odo');
-  const computedVal=hiddenNextDue?.dataset.computed;
-  const intervalVal=parseFloat(document.getElementById('f-next-odo-interval')?.value)||0;
-  const baseVal=parseFloat(document.getElementById('f-next-odo-base')?.value)||0;
+  // Get next due — use computed value if expression was typed, else raw value
+  const nextDueEl=document.getElementById('f-next-odo');
+  const computedVal=nextDueEl?.dataset.computed;
   let nextDueOdo=0;
   if(computedVal&&parseFloat(computedVal)>0){
     nextDueOdo=parseFloat(computedVal);
-  } else if(baseVal>0&&intervalVal>0){
-    nextDueOdo=baseVal+intervalVal; // use computed even if not confirmed
-  } else if(nextDueRaw&&!isNaN(nextDueRaw)){
+  } else {
     nextDueOdo=parseFloat(nextDueRaw)||0;
   }
   await addRec('serviceLogs',{carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),notes:v('f-notes'),receiptUrl,status:'ok'});
