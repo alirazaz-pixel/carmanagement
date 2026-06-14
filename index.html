@@ -405,8 +405,10 @@ window.FIREBASE_CONFIG = {
       <div class="ph">
         <div class="ph-left"><h1>Dashboard</h1><p id="dash-sub">Loading…</p></div>
         <div class="ph-right">
-          <button class="btn btn-secondary" onclick="exportDashboardPDF()"><i class="ti ti-file-type-pdf"></i>Download PDF</button>
-          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-file-spreadsheet"></i>Export Excel</button>
+          <button class="btn btn-secondary" onclick="showModal('fuel')"><i class="ti ti-droplet"></i>Log Fuel</button>
+          <button class="btn btn-secondary" onclick="showModal('service')"><i class="ti ti-tool"></i>Log Service</button>
+          <button class="btn btn-secondary" onclick="exportDashboardPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
           <button class="btn btn-primary" onclick="showModal('car')"><i class="ti ti-plus"></i>Add Car</button>
         </div>
       </div>
@@ -851,13 +853,13 @@ function renderAll(){
 
 // Calculate average KM per day for a car (or filtered set)
 function calcKMperDay(carList, fuelList){
-  // Use odometer readings over time from fuel logs and service logs
   let best=0;
   carList.forEach(c=>{
     const purchaseDate=c.purchaseDate;
-    const odoAtPurchase=parseFloat(c.odoAtPurchase||0);
+    // Fix: odoAtPurchase can be 0 (brand new) — check for null/undefined not falsy
+    const odoAtPurchase=c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):null;
     const currentOdo=parseFloat(c.odometer||0);
-    if(!purchaseDate||currentOdo<=odoAtPurchase)return;
+    if(!purchaseDate||odoAtPurchase===null||currentOdo<=odoAtPurchase)return;
     const days=(Date.now()-new Date(purchaseDate).getTime())/(1000*60*60*24);
     if(days<1)return;
     const kmDay=(currentOdo-odoAtPurchase)/days;
@@ -935,21 +937,24 @@ function renderMOMChart(){
   const filteredSvcAll=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
   const filteredCarsAll=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
 
-  // Monthly fuel cost per month
-  const fuelCosts=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
-  // Monthly litres per month
-  const fuelLitres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
-  // Monthly service cost (actual logged services per month)
+  // Monthly fuel cost split by fuel type
+  const ron92Costs=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-92').reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  const ron95Costs=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-95').reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  const ron92Litres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-92').reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
+  const ron95Litres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-95').reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
+  const allFuelCosts=months.map((m,i)=>ron92Costs[i]+ron95Costs[i]);
   const svcCosts=months.map(m=>filteredSvcAll.filter(s=>s.date&&s.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
-  // Total running cost = fuel + service
-  const totalCosts=months.map((m,i)=>fuelCosts[i]+svcCosts[i]);
+  const totalCosts=months.map((m,i)=>allFuelCosts[i]+svcCosts[i]);
 
   let datasets=[];
   if(momChartType==='cost'||momChartType==='both'){
-    datasets.push({label:'Running Cost (PKR)',data:totalCosts,backgroundColor:'rgba(167,139,250,0.7)',borderColor:'rgba(167,139,250,1)',borderRadius:4,yAxisID:'y'});
+    datasets.push({label:'RON-92 Cost (PKR)',data:ron92Costs,backgroundColor:'rgba(232,196,74,0.75)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:'y'});
+    datasets.push({label:'RON-95 Cost (PKR)',data:ron95Costs,backgroundColor:'rgba(96,165,250,0.75)',borderColor:'rgba(96,165,250,1)',borderRadius:4,yAxisID:'y'});
+    datasets.push({label:'Service Cost (PKR)',data:svcCosts,backgroundColor:'rgba(167,139,250,0.6)',borderColor:'rgba(167,139,250,1)',borderRadius:4,yAxisID:'y'});
   }
   if(momChartType==='fuel'||momChartType==='both'){
-    datasets.push({label:'Petrol (Litres)',data:fuelLitres,backgroundColor:'rgba(232,196,74,0.7)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
+    datasets.push({label:'RON-92 (Litres)',data:ron92Litres,backgroundColor:'rgba(232,196,74,0.75)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
+    datasets.push({label:'RON-95 (Litres)',data:ron95Litres,backgroundColor:'rgba(96,165,250,0.75)',borderColor:'rgba(96,165,250,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
   }
 
   const scales={x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor},title:{display:true,text:'PKR',color:d.textColor,font:{size:10}}}};
@@ -1674,19 +1679,39 @@ function renderCharts(){
   const d=chartDefaults();
   const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}}}};
 
-  // Economy trend
-  const fullFills=fuelLogs.filter(f=>f.fillType==='full'&&f.kmpl>0).slice(-12).reverse();
+  // Economy trend - respect car filter
+  const filteredForCharts=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const fullFills=filteredForCharts.filter(f=>f.fillType==='full'&&f.kmpl>0).slice(-12).reverse();
   mkChart('chart-economy',{type:'line',data:{labels:fullFills.map(f=>f.date.slice(5)),datasets:[{label:'KM/L',data:fullFills.map(f=>f.kmpl),borderColor:'#e8c44a',backgroundColor:'rgba(232,196,74,0.1)',tension:0.3,fill:true,pointRadius:3}]},options:{...baseOpts,plugins:{...baseOpts.plugins}}});
 
-  // Monthly fuel spend
+  // Monthly fuel spend - respect car filter
   const months={};
-  fuelLogs.forEach(f=>{if(!f.date)return;const m=f.date.slice(0,7);months[m]=(months[m]||0)+(parseFloat(f.cost)||0);});
+  filteredForCharts.forEach(f=>{if(!f.date)return;const m=f.date.slice(0,7);months[m]=(months[m]||0)+(parseFloat(f.cost)||0);});
   const mKeys=Object.keys(months).sort().slice(-8);
   mkChart('chart-monthly',{type:'bar',data:{labels:mKeys.map(m=>m.slice(5)+'/'+m.slice(2,4)),datasets:[{label:'PKR',data:mKeys.map(m=>months[m]),backgroundColor:'rgba(96,165,250,0.7)',borderRadius:4}]},options:baseOpts});
 
   // Fuel log charts
-  mkChart('chart-fuel-trend',{type:'line',data:{labels:fullFills.map(f=>f.date.slice(5)),datasets:[{label:'KM/L (Full fills)',data:fullFills.map(f=>f.kmpl),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,0.1)',tension:0.3,fill:true}]},options:{...baseOpts}});
-  mkChart('chart-fuel-cost',{type:'bar',data:{labels:mKeys.map(m=>m.slice(5)+'/'+m.slice(2,4)),datasets:[{label:'PKR',data:mKeys.map(m=>months[m]),backgroundColor:'rgba(232,196,74,0.6)',borderRadius:4}]},options:baseOpts});
+  // Fuel trend - split by car if filter active
+  const fuelPageFills=dashCarId?fullFills:fullFills;
+  const ron92Fills=fuelPageFills.filter(f=>f.fuelType==='RON-92');
+  const ron95Fills=fuelPageFills.filter(f=>f.fuelType==='RON-95');
+  const allFillDates=[...new Set(fuelPageFills.map(f=>f.date.slice(5)))].sort();
+  mkChart('chart-fuel-trend',{type:'line',data:{labels:fuelPageFills.map(f=>f.date.slice(5)),datasets:[
+    {label:'KM/L (Full fills)',data:fuelPageFills.map(f=>f.fillType==='full'?f.kmpl:null),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,0.1)',tension:0.3,fill:true,pointRadius:3},
+  ]},options:{...baseOpts}});
+  // Fuel cost chart split by fuel type
+  const fuelMonths92={};const fuelMonths95={};
+  const filtFL=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  filtFL.forEach(f=>{
+    if(!f.date)return;
+    const m=f.date.slice(0,7);
+    if(f.fuelType==='RON-92')fuelMonths92[m]=(fuelMonths92[m]||0)+(parseFloat(f.cost)||0);
+    else if(f.fuelType==='RON-95')fuelMonths95[m]=(fuelMonths95[m]||0)+(parseFloat(f.cost)||0);
+  });
+  mkChart('chart-fuel-cost',{type:'bar',data:{labels:mKeys.map(m=>m.slice(5)+'/'+m.slice(2,4)),datasets:[
+    {label:'RON-92 (PKR)',data:mKeys.map(m=>fuelMonths92[m]||0),backgroundColor:'rgba(232,196,74,0.75)',borderRadius:4},
+    {label:'RON-95 (PKR)',data:mKeys.map(m=>fuelMonths95[m]||0),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:4},
+  ]},options:baseOpts});
 
   // P&L chart
   const soldCars=cars.filter(c=>c.status==='sold'&&c.boughtAt&&c.soldAt);
@@ -1705,11 +1730,11 @@ function renderFuelPriceChart(){
   if(from)data=data.filter(p=>p.date>=from);
   if(to)data=data.filter(p=>p.date<=to);
   mkChart('chart-fp',{type:'line',data:{labels:data.map(p=>p.date),datasets:[
-    {label:'RON-92',data:data.map(p=>p.ron92||null),borderColor:'#e8c44a',tension:0.3,pointRadius:3,fill:false},
-    {label:'RON-95',data:data.map(p=>p.ron95||null),borderColor:'#60a5fa',tension:0.3,pointRadius:3,fill:false},
-    {label:'HSD',data:data.map(p=>p.hsd||null),borderColor:'#4ade80',tension:0.3,pointRadius:3,fill:false},
-    {label:'CNG',data:data.map(p=>p.cng||null),borderColor:'#f87171',tension:0.3,pointRadius:3,fill:false},
-  ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}}}}});
+    {label:'RON-92 (PKR/L)',data:data.map(p=>p.ron92||null),borderColor:'#e8c44a',backgroundColor:'rgba(232,196,74,0.1)',tension:0.3,pointRadius:4,pointBackgroundColor:'#e8c44a',borderWidth:2.5,fill:true},
+    {label:'RON-95 (PKR/L)',data:data.map(p=>p.ron95||null),borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.1)',tension:0.3,pointRadius:4,pointBackgroundColor:'#60a5fa',borderWidth:2.5,fill:true},
+    {label:'HSD (PKR/L)',data:data.map(p=>p.hsd||null),borderColor:'#4ade80',tension:0.3,pointRadius:3,borderWidth:1.5,fill:false,borderDash:[4,4]},
+    {label:'CNG (PKR/kg)',data:data.map(p=>p.cng||null),borderColor:'#f87171',tension:0.3,pointRadius:3,borderWidth:1.5,fill:false,borderDash:[4,4]},
+  ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}}});
 }
 window.renderFuelPriceChart=renderFuelPriceChart;
 
@@ -1737,8 +1762,8 @@ window.showModal=function(type,data={}){
       <div class="form-group"><label>Token Renewal Date</label><input id="f-token" type="date" value="${data.tokenDate||''}"/></div>
       <div class="form-divider"></div>
       <div class="form-section">📍 Odometer</div>
-      <div class="form-group"><label>Odometer at Purchase (KM)</label><input id="f-odo-purchase" type="number" placeholder="0 if brand new" value="${data.odoAtPurchase||''}"/><span class="input-hint">KM reading when you bought it</span></div>
-      <div class="form-group"><label>Current Odometer (KM)</label><input id="f-odo" type="number" placeholder="3200" value="${data.odometer||''}"/><span class="input-hint">What it shows on dashboard today</span></div>
+      <div class="form-group"><label>Odometer at Purchase (KM)</label><input id="f-odo-purchase" type="number" placeholder="0 if brand new" value="${data.odoAtPurchase!==undefined&&data.odoAtPurchase!==null?data.odoAtPurchase:''}"/><span class="input-hint">KM reading when you bought it (enter 0 if brand new)</span></div>
+      <div class="form-group"><label>Current Odometer (KM)</label><input id="f-odo" type="number" placeholder="3200" value="${data.odometer!==undefined&&data.odometer!==null?data.odometer:''}"/><span class="input-hint">What it shows on dashboard today</span></div>
       <div class="form-divider"></div>
       <div class="form-section">💰 Purchase Finance</div>
       <div class="form-group"><label>Purchase Date</label><input id="f-pdate" type="date" value="${data.purchaseDate||''}"/></div>
@@ -1868,7 +1893,7 @@ window.saveCar=async function(editId=''){
   const data={
     make:v('f-make'),model:v('f-model'),year:v('f-year'),variant:v('f-variant'),
     reg:v('f-reg'),color:v('f-color'),fuelType:v('f-ftype'),tokenDate:v('f-token'),
-    odoAtPurchase:n('f-odo-purchase'),odometer:n('f-odo'),
+    odoAtPurchase:document.getElementById('f-odo-purchase').value!==''?parseFloat(document.getElementById('f-odo-purchase').value):null,odometer:n('f-odo'),
     purchaseDate:v('f-pdate'),boughtAt:n('f-bought'),
     hasInstallment:document.getElementById('f-install')?.checked||false,
     downPayment:n('f-down'),loanAmount:n('f-loan'),monthlyEMI:n('f-emi'),
