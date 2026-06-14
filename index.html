@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -28,7 +28,7 @@
   --purple:#a78bfa;--purple-bg:rgba(167,139,250,0.1);
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
   --sidebar-w:240px;--topbar-h:56px;
-  --font:'Syne',sans-serif;--mono:'Segoe UI',system-ui,sans-serif;
+  --font:'Inter',system-ui,sans-serif;--mono:'Inter',system-ui,sans-serif;
 }
 .light-mode{
   --bg:#f4f4f8;--bg2:#ffffff;--bg3:#eeeef4;--bg4:#e4e4ee;--bg5:#d8d8e8;
@@ -301,8 +301,14 @@ select option{background:var(--bg3);color:var(--text);}
   #mobile-nav{display:flex;}
   .page{padding:14px;padding-bottom:76px;}
   .ph-left h1{font-size:18px;}
+  .ph-right{flex-wrap:wrap;}
+  .tabs{overflow-x:auto;flex-wrap:nowrap;}
+  .tab-btn{white-space:nowrap;}
+  #dash-car-filter{overflow-x:auto;}
+  .top-search{display:none;}
 }
 #mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--bg2);border-top:1px solid var(--border);padding:6px 0 max(6px,env(safe-area-inset-bottom));}
+#dash-car-filter{overflow-x:auto;padding-bottom:4px;flex-wrap:nowrap!important;}
 .mob-nav-items{display:flex;justify-content:space-around;}
 .mob-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 10px;cursor:pointer;color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;transition:color 0.15s;}
 .mob-nav-item.active{color:var(--gold);}
@@ -463,12 +469,13 @@ window.FIREBASE_CONFIG = {
           <button class="btn btn-primary" onclick="showModal('service')"><i class="ti ti-plus"></i>Log Service</button>
         </div>
       </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="svc-car-filter"></div>
       <div class="section-head"><h2>Alerts &amp; Upcoming</h2></div>
       <div class="service-list" id="svc-alerts-list" style="margin-top:8px"></div>
       <div class="section-head" style="margin-top:4px"><h2>Full Service History</h2></div>
       <div class="table-wrap" style="margin-top:8px">
         <table>
-          <thead><tr><th>Date</th><th>Car</th><th>Service</th><th>Cost (PKR)</th><th>Odometer</th><th>Next Due (KM)</th><th>KM Left</th><th>Days Since</th><th>Status</th><th>Receipt</th></tr></thead>
+          <thead><tr><th>Date</th><th>Car</th><th>Service</th><th>Cost (PKR)</th><th>Odometer</th><th>Next Due (KM)</th><th>KM Left</th><th>Days Since</th><th>Status</th><th>Receipt</th><th>Actions</th></tr></thead>
           <tbody id="svc-tbody"></tbody>
         </table>
       </div>
@@ -642,7 +649,8 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstati
 let db=null, storage=null;
 let cars=[], fuelLogs=[], serviceLogs=[], fuelPrices=[];
 let carsFilter='all';
-let dashCarId=null; // null = all cars
+let dashCarId=null;
+let svcCarId=null;
 let chartInstances={};
 let DEFAULT_SVC_TYPES=['Oil Change','Oil Filter Change','Air Filter Change','Fuel Filter Change','Spark Plugs Change','Transmission Oil Change','Coolant / Radiator Flush','Engine Tune-up','Tyre Puncture Repair','Tyre Rotation','Tyre Balancing','Wheel Alignment','Tyre Replacement','Brake Pads Change','Brake Disc Change','Brake Oil Change','AC Filter Change','AC Gas Refill','AC Service / Cleaning','Battery Change','Battery Terminals Cleaning','Car Wash / Detailing','Windshield Wiper Change','Headlight / Bulb Change','Suspension Check','Steering Oil Change','General Inspection'];
 let svcTypes = JSON.parse(localStorage.getItem('fl_svc_types')||JSON.stringify(DEFAULT_SVC_TYPES));
@@ -1079,6 +1087,27 @@ function daysSince(dateStr){
   return Math.floor(diff/(1000*60*60*24));
 }
 
+// ── SERVICE CAR FILTER ───────────────────────────────────────────
+function buildSvcCarFilter(){
+  const wrap=document.getElementById('svc-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(svcCarId===null?'active':'')+'" onclick="setSvcCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(svcCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setSvcCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+window.setSvcCar=function(carId,btn){
+  svcCarId=carId;
+  document.querySelectorAll('#svc-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderServiceLog();
+}
+
 // ── FUEL LOG ──────────────────────────────────────────────────────
 function renderFuelLog(){
   const tbody=document.getElementById('fuel-tbody');
@@ -1104,8 +1133,10 @@ function renderFuelLog(){
 
 // ── SERVICE LOG ───────────────────────────────────────────────────
 function renderServiceLog(){
+  buildSvcCarFilter();
+  const filteredSvcLog=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
   const tbody=document.getElementById('svc-tbody');
-  const alerts=serviceLogs.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon');
+  const alerts=filteredSvcLog.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon');
   renderSvcAlerts('svc-alerts-list',alerts);
   renderSvcAlerts('dash-services',alerts.slice(0,5));
 
@@ -1115,8 +1146,8 @@ function renderServiceLog(){
   badge.style.display=cnt>0?'inline':'none';
   if(cnt>0)badge.textContent=cnt;
 
-  if(!serviceLogs.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;return;}
-  tbody.innerHTML=serviceLogs.map(s=>{
+  if(!filteredSvcLog.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;return;}
+  tbody.innerHTML=filteredSvcLog.map(s=>{
     const car=cars.find(c=>c.id===s.carId);
     const st=svcStatus(s);
     const kl=kmLeft(s);
@@ -1132,6 +1163,10 @@ function renderServiceLog(){
       <td class="mono">${ds!==null?ds+' days':'—'}</td>
       <td><span class="badge ${st}">${st}</span></td>
       <td>${s.receiptUrl?`<a href="${s.receiptUrl}" target="_blank" style="color:var(--blue);font-size:12px"><i class="ti ti-photo"></i> View</a>`:'—'}</td>
+      <td style="white-space:nowrap">
+        <button onclick="event.stopPropagation();editService('${s.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
+        <button onclick="event.stopPropagation();deleteService('${s.id}')" style="background:var(--red-bg);border:1px solid rgba(248,113,113,0.2);border-radius:5px;color:var(--red);padding:3px 8px;cursor:pointer;font-size:11px"><i class="ti ti-trash" style="font-size:12px"></i></button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1339,49 +1374,41 @@ window.syncNextDueBase=function(){
 }
 window.calcNextDue=function(){
   const inp=document.getElementById('f-next-odo');
-  const resultBox=document.getElementById('f-next-odo-result');
+  const ghost=document.getElementById('f-next-odo-ghost');
   const calcSpan=document.getElementById('f-next-odo-calc');
   const hint=document.getElementById('f-next-odo-hint');
   if(!inp)return;
   const raw=inp.value.trim();
-  if(!raw){if(resultBox)resultBox.style.display='none';return;}
-  // Try to evaluate expression like "34218 + 5000" or "39218"
-  try {
-    // Only allow safe math: digits, spaces, +, -, *, /
-    if(!/^[\d\s\+\-\*\/\.]+$/.test(raw)){
-      if(resultBox)resultBox.style.display='none';return;
-    }
-    const result=Function('"use strict";return ('+raw+')')();
-    if(isNaN(result)||result<=0){if(resultBox)resultBox.style.display='none';return;}
+  if(!raw){if(ghost)ghost.style.display='none';inp.dataset.computed='';return;}
+  try{
+    const safe=raw.replace(/[^0-9 +\-*/.]/g,'');
+    if(!safe){if(ghost)ghost.style.display='none';return;}
+    const result=Function('"use strict";return ('+safe+')')();
+    if(isNaN(result)||result<=0){if(ghost)ghost.style.display='none';return;}
     const rounded=Math.round(result);
     inp.dataset.computed=rounded;
-    // Only show result box if it's an expression (contains operator)
-    if(/[\+\-\*\/]/.test(raw)){
+    if(/[+\-*/]/.test(raw)){
       if(calcSpan)calcSpan.textContent=rounded.toLocaleString();
-      if(resultBox)resultBox.style.display='block';
-      if(hint)hint.textContent='Press Enter or tap the result to use '+rounded.toLocaleString()+' KM';
+      if(ghost)ghost.style.display='block';
+      if(hint)hint.textContent='Press Enter to confirm '+rounded.toLocaleString()+' KM';
     } else {
-      // Plain number typed — just store it, no result box needed
       inp.dataset.computed=rounded;
-      if(resultBox)resultBox.style.display='none';
-      if(hint)hint.textContent='Type a number directly, or calculate e.g. 34218 + 5000. Press Enter to confirm.';
+      if(ghost)ghost.style.display='none';
     }
-  } catch(e){
-    if(resultBox)resultBox.style.display='none';
-  }
+  }catch(e){if(ghost)ghost.style.display='none';}
 }
 window.fillNextDue=function(){
   const inp=document.getElementById('f-next-odo');
-  const resultBox=document.getElementById('f-next-odo-result');
+  const ghost=document.getElementById('f-next-odo-ghost');
   const hint=document.getElementById('f-next-odo-hint');
-  const computed=inp?.dataset.computed;
-  if(!computed)return;
-  // Replace expression with clean number
-  inp.value=computed;
+  const computed=inp&&inp.dataset.computed;
+  if(!computed||!parseFloat(computed))return;
+  inp.value=parseFloat(computed).toLocaleString('en-PK');
   inp.dataset.computed=computed;
-  if(resultBox)resultBox.style.display='none';
-  if(hint)hint.textContent='✅ Set to '+parseFloat(computed).toLocaleString()+' KM';
+  if(ghost)ghost.style.display='none';
+  if(hint)hint.textContent='Set to '+parseFloat(computed).toLocaleString()+' KM';
 }
+
 
 // ── SERVICE STATION AUTOCOMPLETE ─────────────────────────────────
 function getSvcStations(){return[...new Set(serviceLogs.map(s=>s.station).filter(Boolean))];}
@@ -1708,13 +1735,13 @@ window.showModal=function(type,data={}){
       <div class="form-group span-2"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, Filter House…" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
       <div class="form-group span-2">
         <label>Next Due Odometer (KM)</label>
-        <input id="f-next-odo" placeholder="e.g. 39218  or  34218 + 5000" oninput="calcNextDue()" onkeydown="if(event.key==='Enter'){event.preventDefault();fillNextDue();}"/>
-        <div id="f-next-odo-result" style="display:none;margin-top:8px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 16px;cursor:pointer" onclick="fillNextDue()">
-          <span style="font-size:12px;color:var(--text3)">= </span>
-          <span id="f-next-odo-calc" style="font-size:20px;font-weight:700;color:var(--green)"></span>
-          <span style="font-size:12px;color:var(--green);margin-left:10px">KM — press Enter or tap to use</span>
+        <div style="position:relative">
+          <input id="f-next-odo" placeholder="e.g. 39,218  or  34218 + 5000" oninput="calcNextDue()" onkeydown="if(event.key==='Enter'){event.preventDefault();fillNextDue();}" style="padding-right:140px"/>
+          <div id="f-next-odo-ghost" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--green);opacity:0.85;pointer-events:none;white-space:nowrap">
+            = <span id="f-next-odo-calc"></span> KM
+          </div>
         </div>
-        <span class="input-hint" id="f-next-odo-hint">Type a number directly, or calculate e.g. 34218 + 5000. Press Enter to confirm.</span>
+        <span class="input-hint" id="f-next-odo-hint">Type a number, or an expression like 34218 + 5000. Press Enter to confirm.</span>
       </div>
       <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…"></textarea></div>
       <div class="form-group span-2"><label>Receipt Photo (optional)</label>
@@ -1816,6 +1843,16 @@ window.saveFuel=async function(){
   closeModal();showToast(fillType==='full'?'Full fill logged! KM/L calculated.':'Partial fill logged (estimate only).');
 }
 
+window.editService=function(id){
+  const s=serviceLogs.find(x=>x.id===id);
+  if(!s)return;
+  showModal('service',s);
+}
+window.deleteService=async function(id){
+  if(!confirm('Delete this service record?'))return;
+  await deleteRec('serviceLogs',id);
+  showToast('Service record deleted');
+}
 window.saveOdo=async function(carId){
   const newOdo=n('f-new-odo');
   if(!newOdo){showToast('Enter odometer reading','error');return;}
