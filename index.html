@@ -858,7 +858,7 @@ function calcKMperDay(carList, fuelList){
     const purchaseDate=c.purchaseDate;
     // Fix: odoAtPurchase can be 0 (brand new) — check for null/undefined not falsy
     const odoAtPurchase=c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):null;
-    const currentOdo=parseFloat(c.odometer||0);
+    const currentOdo=getTrueOdo(c.id);
     if(!purchaseDate||odoAtPurchase===null||currentOdo<=odoAtPurchase)return;
     const days=(Date.now()-new Date(purchaseDate).getTime())/(1000*60*60*24);
     if(days<1)return;
@@ -1082,7 +1082,8 @@ function renderCarCards(elId,list){
     const overdue=svcList.filter(s=>svcStatus(s)==='overdue').length;
     const pl=c.status==='sold'&&c.soldAt&&c.boughtAt?(parseFloat(c.soldAt)-parseFloat(c.boughtAt)):null;
     const totalSvcCost=svcList.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-    const kmDriven=(parseFloat(c.odometer||0))-(parseFloat(c.odoAtPurchase||0));
+    const trueOdo=getTrueOdo(c.id);
+    const kmDriven=trueOdo-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
 
     return `<div class="car-card" onclick="openCarDetail('${c.id}')">
       <div class="car-card-top">
@@ -1099,7 +1100,7 @@ function renderCarCards(elId,list){
       <div class="car-card-stats">
         <div class="cs"><div class="cs-label">Fuel Avg (KM/L)</div><div class="cs-val" style="color:${col}">${avg}</div></div>
         <div class="cs"><div class="cs-label">Last Fill</div><div class="cs-val">${lastFuel?lastFuel.date:'—'}</div></div>
-        <div class="cs"><div class="cs-label">Odometer</div><div class="cs-val">${fmtKM(c.odometer)} KM</div></div>
+        <div class="cs"><div class="cs-label">Odometer</div><div class="cs-val">${fmtKM(trueOdo)} KM</div></div>
         <div class="cs"><div class="cs-label">KM Driven</div><div class="cs-val">${kmDriven>0?fmtKM(kmDriven)+' KM':'—'}</div></div>
         ${pl!==null
           ?`<div class="cs"><div class="cs-label">Sold For</div><div class="cs-val">${fmtPKR(c.soldAt)}</div></div>
@@ -1128,21 +1129,33 @@ function renderCarList(){
   renderCarCards('cars-list',list);
 }
 
+// ── GET TRUE CURRENT ODOMETER (max across all logs) ──────────────
+function getTrueOdo(carId){
+  const car=cars.find(c=>c.id===carId);
+  const carOdo=parseFloat(car?.odometer||0);
+  // Get max from fuel logs
+  const maxFuelOdo=fuelLogs.filter(f=>f.carId===carId&&f.odometer>0)
+    .reduce((max,f)=>Math.max(max,parseFloat(f.odometer||0)),0);
+  // Get max from service logs
+  const maxSvcOdo=serviceLogs.filter(s=>s.carId===carId&&s.odometer>0)
+    .reduce((max,s)=>Math.max(max,parseFloat(s.odometer||0)),0);
+  // Return highest of all three
+  return Math.max(carOdo,maxFuelOdo,maxSvcOdo);
+}
+
 // ── SERVICE STATUS ────────────────────────────────────────────────
 function svcStatus(s){
-  const car=cars.find(c=>c.id===s.carId);
-  const odo=parseFloat(car?.odometer||0);
+  const odo=getTrueOdo(s.carId);
   const nextDue=parseFloat(s.nextDueOdo||0);
   if(!nextDue)return s.status||'ok';
-  const kmLeft=nextDue-odo;
-  if(kmLeft<0)return'overdue';
-  if(kmLeft<500)return'due-soon';
+  const kl=nextDue-odo;
+  if(kl<0)return'overdue';
+  if(kl<500)return'due-soon';
   return'ok';
 }
 
 function kmLeft(s){
-  const car=cars.find(c=>c.id===s.carId);
-  const odo=parseFloat(car?.odometer||0);
+  const odo=getTrueOdo(s.carId);
   const nextDue=parseFloat(s.nextDueOdo||0);
   if(!nextDue)return null;
   return nextDue-odo;
@@ -1226,7 +1239,7 @@ function renderServiceLog(){
       <td>${s.type}</td>
       <td class="gold mono">₨${fmt(s.cost)}</td>
       <td class="mono">${fmtKM(s.odometer)} KM</td>
-      <td class="blue mono">${curOdo>0?fmtKM(curOdo)+' KM':'—'}</td>
+      <td class="blue mono">${getTrueOdo(s.carId)>0?fmtKM(getTrueOdo(s.carId))+' KM':'—'}</td>
       <td class="mono">${s.nextDueOdo?fmtKM(s.nextDueOdo)+' KM':'—'}</td>
       <td class="${kl===null?'':kl<0?'red':kl<500?'amber':'green'} mono">${kl===null?'—':kl<0?'⚠ Overdue '+fmtKM(Math.abs(kl))+' KM':fmtKM(kl)+' KM left'}</td>
       <td class="mono">${ds!==null?ds+' days':'—'}</td>
@@ -1268,7 +1281,8 @@ function renderPL(){
     const svcCost=serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
     const bought=parseFloat(c.boughtAt||0);
     const sold=parseFloat(c.soldAt||0);
-    const kmDriven=(parseFloat(c.odometer||0))-(parseFloat(c.odoAtPurchase||0));
+    const trueOdo=getTrueOdo(c.id);
+    const kmDriven=trueOdo-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
     const totalSpent=bought+fuelCost+svcCost;
     const costPerKm=kmDriven>0?(totalSpent/kmDriven).toFixed(2):null;
     const pl=c.status==='sold'?sold-bought:null;
@@ -1516,7 +1530,7 @@ function renderReminderList(elId, list, status){
     const ds=daysSince(s.date);
     const col=status==='overdue'?'red':status==='due-soon'?'amber':'green';
     const nextDueOdo=s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString():null;
-    const curOdo=car?parseFloat(car.odometer||0).toLocaleString():null;
+    const curOdo=car?getTrueOdo(car.id).toLocaleString():null;
     let dueInfo='';
     if(nextDueOdo){
       if(kl<0) dueInfo='Was due at '+nextDueOdo+' KM — now at '+curOdo+' KM';
@@ -1547,7 +1561,7 @@ function renderSvcProgress(elId){
     const car=cars.find(c=>c.id===s.carId);
     const done=parseFloat(s.odometer)||0;
     const due=parseFloat(s.nextDueOdo)||0;
-    const cur=parseFloat(car?.odometer||done);
+    const cur=car?getTrueOdo(car.id):done;
     const total=due-done; if(total<=0)return'';
     const used=cur-done;
     const pct=Math.min(100,Math.max(0,(used/total)*100));
