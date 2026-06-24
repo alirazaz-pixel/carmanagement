@@ -1194,6 +1194,17 @@ function renderFuelLog(){
   if(!fuelLogs.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
   tbody.innerHTML=fuelLogs.map(f=>{
     const car=cars.find(c=>c.id===f.carId);
+    // Missed checkpoint row
+    if(f.isMissed||f.fillType==='missed'){
+      return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
+        <td class="mono">${f.date}</td>
+        <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+        <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
+        <td class="mono">${fmtKM(f.odometer)} KM</td>
+        <td>—</td>
+        <td><span class="badge" style="background:var(--amber-bg);color:var(--amber)">Missed</span></td>
+      </tr>`;
+    }
     const ppl=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
     return`<tr>
       <td class="mono">${f.date}</td>
@@ -1205,7 +1216,7 @@ function renderFuelLog(){
       <td class="gold mono">₨${fmt(f.cost)}</td>
       <td class="mono">${fmtKM(f.odometer)} KM</td>
       <td class="mono">${f.distance?fmtKM(f.distance)+' KM':'—'}</td>
-      <td class="${f.fillType==='full'&&f.kmpl>0?(f.kmpl>14?'green':f.kmpl>10?'amber':'red'):'blue'} mono">${f.fillType==='full'&&f.kmpl>0?f.kmpl.toFixed(1):'~'+( f.kmpl>0?f.kmpl.toFixed(1):'—')}</td>
+      <td class="${f.fillType==='full'&&f.kmpl>0?(f.kmpl>14?'green':f.kmpl>10?'amber':'red'):'blue'} mono">${f.fillType==='full'&&f.kmpl>0?f.kmpl.toFixed(1):'~'+(f.kmpl>0?f.kmpl.toFixed(1):'—')}</td>
       <td><span class="badge ${f.fillType==='full'?'full':'partial'}">${f.fillType==='full'?'Full':'Partial'}</span></td>
     </tr>`;
   }).join('');
@@ -1804,20 +1815,29 @@ window.showModal=function(type,data={}){
       </div>
       <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
       <div class="form-group"><label>Fill Type</label>
-        <select id="f-fill-type"><option value="full">Full Tank</option><option value="partial">Partial Fill</option></select>
+        <select id="f-fill-type" onchange="onFillTypeChange()">
+          <option value="full">⛽ Full Tank</option>
+          <option value="partial">🔸 Partial Fill</option>
+          <option value="missed">⚠️ Missed (Checkpoint)</option>
+        </select>
       </div>
-      <div class="form-group"><label>Fuel Station</label><div class="ac-wrap"><input id="f-station" placeholder="PSO, Shell, Total…" oninput="acShow('f-station',getStations())"/><div class="ac-list" id="ac-f-station"></div></div></div>
-      <div class="form-group"><label>Fuel Type</label>
-        <select id="f-ftype2"><option>RON-92</option><option>RON-95</option><option>HSD</option><option>CNG</option></select>
+      <div id="f-missed-note" style="display:none;grid-column:1/-1;background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--amber)">
+        <strong>Missed checkpoint</strong> — Only odometer is recorded. KM/L will not be calculated. This keeps your next fill-up accurate by marking the gap.
       </div>
-      <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')"./><span class="input-hint">Price per litre</span></div>
-      <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40" oninput="autoFuel('litres')"./></div>
-      <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"./><span class="input-hint">Fill any 2 of the 3 fields &mdash; 3rd auto-calculates</span></div>
-      <div class="form-group"><label>Odometer Now (KM)</label><input id="f-odo2" type="number" placeholder="48320" oninput="calcKmpl()"/></div>
-      <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill estimate</span></div>
-      <div class="form-group" id="kmpl-preview" style="display:none;grid-column:1/-1">
-        <div style="background:var(--green-bg);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:14px;color:var(--green)">
-          Calculated: <strong id="kmpl-val">—</strong> KM/L
+      <div id="f-fuel-main" style="display:contents">
+        <div class="form-group"><label>Fuel Station</label><div class="ac-wrap"><input id="f-station" placeholder="PSO, Shell, Total…" oninput="acShow('f-station',getStations())"/><div class="ac-list" id="ac-f-station"></div></div></div>
+        <div class="form-group"><label>Fuel Type</label>
+          <select id="f-ftype2"><option>RON-92</option><option>RON-95</option><option>HSD</option><option>CNG</option></select>
+        </div>
+        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')"/></div>
+        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40.0" oninput="autoFuel('litres')"/></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — the 3rd calculates automatically</span></div>
+        <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
+      </div>
+      <div class="form-group span-2"><label>Odometer Now (KM)</label><input id="f-odo2" type="number" placeholder="48320" oninput="calcKmpl()"/></div>
+      <div id="kmpl-preview" style="display:none;grid-column:1/-1">
+        <div style="background:var(--green-bg);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--green)">
+          ✅ Calculated KM/L: <strong id="kmpl-val">—</strong>
         </div>
       </div>
     </div></div>
@@ -1928,13 +1948,23 @@ window.deleteCar=async function(id){
 window.saveFuel=async function(){
   const carId=v('f-car-id');
   if(!carId){showToast('Select a car','error');return;}
-  const litres=n('f-litres');const dist=n('f-dist');const fillType=v('f-fill-type');
-  const kmpl=litres&&dist?(dist/litres):0;
+  const fillType=v('f-fill-type');
   const odo=n('f-odo2');
-  // Auto-save price per litre to fuel prices
+  const date=v('f-date');
+
+  // Handle missed checkpoint
+  if(fillType==='missed'){
+    if(!odo){showToast('Enter current odometer for checkpoint','error');return;}
+    await addRec('fuelLogs',{carId,date,fillType:'missed',odometer:odo,litres:0,cost:0,kmpl:0,station:'',fuelType:'',isMissed:true});
+    if(odo)await updateRec('cars',carId,{odometer:odo});
+    closeModal();showToast('Missed checkpoint saved — odometer updated.');
+    return;
+  }
+
+  const litres=n('f-litres');const dist=n('f-dist');
+  const kmpl=litres&&dist?(dist/litres):0;
   const cost=n('f-cost');
   const ppl=litres&&cost?parseFloat((cost/litres).toFixed(2)):0;
-  const date=v('f-date');
   const ftype=v('f-ftype2');
 
   await addRec('fuelLogs',{carId,date,fillType,station:v('f-station'),fuelType:ftype,litres,cost,odometer:odo,distance:dist,kmpl:parseFloat(kmpl.toFixed(2))});
@@ -2046,23 +2076,52 @@ window.autoFuel=function(changed){
   const litresEl=document.getElementById('f-litres');
   const costEl=document.getElementById('f-cost');
   if(!rateEl||!litresEl||!costEl)return;
-  const rate=parseFloat(rateEl.value)||0;
-  const litres=parseFloat(litresEl.value)||0;
-  const cost=parseFloat(costEl.value)||0;
-  // Only calculate the field that is NOT the one being typed in
-  if(changed==='rate'){
-    if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
-    else if(rate>0&&cost>0)litresEl.value=(cost/rate).toFixed(2);
-  }
-  else if(changed==='litres'){
-    if(litres>0&&rate>0)costEl.value=(rate*litres).toFixed(0);
-    else if(litres>0&&cost>0)rateEl.value=(cost/litres).toFixed(2);
-  }
-  else if(changed==='cost'){
-    if(cost>0&&litres>0)rateEl.value=(cost/litres).toFixed(2);
-    else if(cost>0&&rate>0)litresEl.value=(cost/rate).toFixed(2);
+  // Read current values — treat empty string as null, not 0
+  const rateVal=rateEl.value.trim();
+  const litresVal=litresEl.value.trim();
+  const costVal=costEl.value.trim();
+  const rate=rateVal!==''?parseFloat(rateVal):null;
+  const litres=litresVal!==''?parseFloat(litresVal):null;
+  const cost=costVal!==''?parseFloat(costVal):null;
+  // Count how many are filled
+  const filled=[rate,litres,cost].filter(v=>v!==null&&v>0).length;
+  if(filled<2){calcKmpl();return;} // need at least 2 to calculate
+  // Calculate the one that is null/empty
+  if(rate!==null&&litres!==null&&cost===null){
+    // rate + litres → cost
+    costEl.value=(rate*litres).toFixed(0);
+  } else if(rate!==null&&cost!==null&&litres===null){
+    // rate + cost → litres
+    litresEl.value=(cost/rate).toFixed(2);
+  } else if(litres!==null&&cost!==null&&rate===null){
+    // litres + cost → rate
+    rateEl.value=(cost/litres).toFixed(2);
+  } else if(filled===3){
+    // All 3 filled — recalculate the one that WASN'T just changed
+    if(changed==='rate'||changed==='litres'){
+      // User typed rate or litres → update cost
+      costEl.value=(rate*litres).toFixed(0);
+    } else if(changed==='cost'){
+      // User typed cost → update rate (keep litres)
+      if(litres>0)rateEl.value=(cost/litres).toFixed(2);
+    }
   }
   calcKmpl();
+}
+
+window.onFillTypeChange=function(){
+  const type=document.getElementById('f-fill-type')?.value;
+  const fuelMain=document.getElementById('f-fuel-main');
+  const missedNote=document.getElementById('f-missed-note');
+  const kmplPrev=document.getElementById('kmpl-preview');
+  if(type==='missed'){
+    if(fuelMain)fuelMain.style.display='none';
+    if(missedNote)missedNote.style.display='block';
+    if(kmplPrev)kmplPrev.style.display='none';
+  } else {
+    if(fuelMain)fuelMain.style.display='contents';
+    if(missedNote)missedNote.style.display='none';
+  }
 }
 
 // ── KM/L PREVIEW ──────────────────────────────────────────────────
