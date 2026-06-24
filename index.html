@@ -1829,9 +1829,9 @@ window.showModal=function(type,data={}){
         <div class="form-group"><label>Fuel Type</label>
           <select id="f-ftype2"><option>RON-92</option><option>RON-95</option><option>HSD</option><option>CNG</option></select>
         </div>
-        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')"/></div>
-        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40.0" oninput="autoFuel('litres')"/></div>
-        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd calculates automatically</span></div>
+        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')" data-typed="no"/></div>
+        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40.0" oninput="autoFuel('litres')" data-typed="no"/></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')" data-typed="no"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
         <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
       </div>
       <div class="form-group span-2"><label>Odometer Now (KM)</label><input id="f-odo2" type="number" placeholder="48320" oninput="calcKmpl()"/></div>
@@ -2073,28 +2073,67 @@ document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))document.
 // ── AUTO FUEL CALC (any 2 of rate/litres/cost fills 3rd) ─────────
 // Track which fields the user has actively typed in
 // ── FUEL AUTO CALC ───────────────────────────────────────────────
+// Track which fields the USER typed (not auto-calculated)
+// data-typed="yes" = user typed it, never overwrite
+// data-typed="no"  = auto-calculated or empty, safe to overwrite
+
 window.autoFuel=function(changed){
   const rateEl=document.getElementById('f-rate');
   const litresEl=document.getElementById('f-litres');
   const costEl=document.getElementById('f-cost');
   if(!rateEl||!litresEl||!costEl)return;
+
+  // Mark this field as user-typed — NEVER overwrite it
+  if(changed==='rate')rateEl.dataset.typed='yes';
+  else if(changed==='litres')litresEl.dataset.typed='yes';
+  else if(changed==='cost')costEl.dataset.typed='yes';
+
+  // Clear this field's value triggers auto-clear typed status
+  if(changed==='rate'&&rateEl.value==='')rateEl.dataset.typed='no';
+  if(changed==='litres'&&litresEl.value==='')litresEl.dataset.typed='no';
+  if(changed==='cost'&&costEl.value==='')costEl.dataset.typed='no';
+
+  const rateTyped=rateEl.dataset.typed==='yes';
+  const litresTyped=litresEl.dataset.typed==='yes';
+  const costTyped=costEl.dataset.typed==='yes';
+
   const rate=rateEl.value!==''?parseFloat(rateEl.value):null;
   const litres=litresEl.value!==''?parseFloat(litresEl.value):null;
   const cost=costEl.value!==''?parseFloat(costEl.value):null;
-  if(changed==='rate'){
-    if(rate>0&&litres!==null&&litres>0)costEl.value=(rate*litres).toFixed(0);
-    else if(rate>0&&cost!==null&&cost>0)litresEl.value=(cost/rate).toFixed(2);
-  } else if(changed==='litres'){
-    if(litres>0&&rate!==null&&rate>0)costEl.value=(rate*litres).toFixed(0);
-    else if(litres>0&&cost!==null&&cost>0)rateEl.value=(cost/litres).toFixed(2);
-  } else if(changed==='cost'){
-    if(cost>0&&litres!==null&&litres>0)rateEl.value=(cost/litres).toFixed(2);
-    else if(cost>0&&rate!==null&&rate>0)litresEl.value=(cost/rate).toFixed(2);
+
+  // Only calculate a field if it was NOT typed by user
+  // Rule: exactly identify the "target" field (not typed, not the one just changed)
+
+  if(rateTyped&&litresTyped&&!costTyped){
+    // User typed rate AND litres → calculate cost
+    if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
   }
+  else if(rateTyped&&costTyped&&!litresTyped){
+    // User typed rate AND cost → calculate litres
+    if(rate>0&&cost>0)litresEl.value=(cost/rate).toFixed(2);
+  }
+  else if(litresTyped&&costTyped&&!rateTyped){
+    // User typed litres AND cost → calculate rate
+    if(litres>0&&cost>0)rateEl.value=(cost/litres).toFixed(2);
+  }
+  // If all 3 are user-typed (user manually edited a previously auto field),
+  // recalculate only the non-changed field that was auto-calculated
+  else if(rateTyped&&litresTyped&&costTyped){
+    if(changed==='rate'||changed==='litres'){
+      if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
+    } else if(changed==='cost'){
+      if(cost>0&&litres>0)rateEl.value=(cost/litres).toFixed(2);
+    }
+  }
+
   calcKmpl();
 }
+
 function resetFuelFields(){
-  ['f-rate','f-litres','f-cost'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-rate','f-litres','f-cost'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.value='';el.dataset.typed='no';}
+  });
 }
 
 window.onFillTypeChange=function(){
