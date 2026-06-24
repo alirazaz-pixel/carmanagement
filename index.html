@@ -492,6 +492,9 @@ window.FIREBASE_CONFIG = {
           <thead><tr><th>Date</th><th>Car</th><th>Station</th><th>Type</th><th>Litres</th><th>PKR/L</th><th>Total (PKR)</th><th>Odometer</th><th>Distance</th><th>KM/L</th><th>Fill</th><th>Actions</th></tr></thead>
           <tbody id="fuel-tbody"></tbody>
         </table>
+        <div style="padding:10px 14px;font-size:11px;color:var(--text3);border-top:1px solid var(--border)">
+          * Distance and KM/L marked with * are auto-calculated from odometer readings (not manually entered). To make permanent, edit the record and save.
+        </div>
       </div>
     </div>
 
@@ -1191,7 +1194,46 @@ window.setSvcCar=function(carId,btn){
 // ── FUEL LOG ──────────────────────────────────────────────────────
 function renderFuelLog(){
   const tbody=document.getElementById('fuel-tbody');
-  if(!fuelLogs.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
+  if(!fuelLogs.length){tbody.innerHTML=`<tr><td colspan="12"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
+
+  // Build per-car sorted fuel log to calculate distance on the fly
+  // Sort all logs by odometer ascending per car
+  const carLogs={};
+  fuelLogs.forEach(f=>{
+    if(!carLogs[f.carId])carLogs[f.carId]=[];
+    carLogs[f.carId].push(f);
+  });
+  // Sort each car's logs by odometer ascending
+  Object.keys(carLogs).forEach(cid=>{
+    carLogs[cid].sort((a,b)=>parseFloat(a.odometer||0)-parseFloat(b.odometer||0));
+  });
+  // For each log, find previous non-missed entry for same car
+  function getPrevFuel(f){
+    const logs=carLogs[f.carId]||[];
+    const idx=logs.findIndex(x=>x.id===f.id);
+    // Find previous non-missed entry
+    for(let i=idx-1;i>=0;i--){
+      if(!logs[i].isMissed&&logs[i].fillType!=='missed'&&parseFloat(logs[i].odometer||0)>0)return logs[i];
+    }
+    return null;
+  }
+  function getCalcDistance(f){
+    if(f.isMissed||f.fillType==='missed')return null;
+    if(f.distance&&parseFloat(f.distance)>0)return parseFloat(f.distance);
+    const prev=getPrevFuel(f);
+    if(!prev)return null;
+    const d=parseFloat(f.odometer||0)-parseFloat(prev.odometer||0);
+    return d>0?d:null;
+  }
+  function getCalcKmpl(f){
+    if(f.kmpl&&parseFloat(f.kmpl)>0)return parseFloat(f.kmpl);
+    if(f.fillType!=='full')return null;
+    const dist=getCalcDistance(f);
+    const litres=parseFloat(f.litres||0);
+    if(dist&&litres>0)return parseFloat((dist/litres).toFixed(2));
+    return null;
+  }
+
   tbody.innerHTML=fuelLogs.map(f=>{
     const car=cars.find(c=>c.id===f.carId);
     const actionBtns=`<td style="white-space:nowrap">
@@ -1211,6 +1253,9 @@ function renderFuelLog(){
       </tr>`;
     }
     const ppl=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
+    const calcDist=getCalcDistance(f);
+    const calcKmpl=getCalcKmpl(f);
+    const distWasCalc=calcDist&&!(f.distance&&parseFloat(f.distance)>0); // true if calculated not stored
     return`<tr>
       <td class="mono">${f.date}</td>
       <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
@@ -1220,8 +1265,8 @@ function renderFuelLog(){
       <td class="mono">${ppl!=='—'?'₨'+ppl:'—'}</td>
       <td class="gold mono">₨${fmt(f.cost)}</td>
       <td class="mono">${fmtKM(f.odometer)} KM</td>
-      <td class="mono">${f.distance?fmtKM(f.distance)+' KM':'—'}</td>
-      <td class="${f.fillType==='full'&&f.kmpl>0?(f.kmpl>14?'green':f.kmpl>10?'amber':'red'):'blue'} mono">${f.fillType==='full'&&f.kmpl>0?f.kmpl.toFixed(1):'~'+(f.kmpl>0?f.kmpl.toFixed(1):'—')}</td>
+      <td class="mono ${distWasCalc?'amber':''}" title="${distWasCalc?'Auto-calculated from odometer difference':''}">${calcDist?fmtKM(calcDist)+' KM'+(distWasCalc?' *':''):'—'}</td>
+      <td class="${f.fillType==='full'&&calcKmpl?(calcKmpl>14?'green':calcKmpl>10?'amber':'red'):'blue'} mono">${calcKmpl?calcKmpl.toFixed(1)+(distWasCalc?' *':''):'~—'}</td>
       <td><span class="badge ${f.fillType==='full'?'full':'partial'}">${f.fillType==='full'?'Full':'Partial'}</span></td>
       ${actionBtns}
     </tr>`;
