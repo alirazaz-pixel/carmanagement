@@ -1807,7 +1807,7 @@ window.showModal=function(type,data={}){
     </div>`;
   }
 
-  else if(type==='fuel'){
+  else if(type==='fuel'){resetFuelFields();
     html=`<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
       <div class="form-group span-2"><label>Car</label>
@@ -1831,7 +1831,7 @@ window.showModal=function(type,data={}){
         </div>
         <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="248.74" oninput="autoFuel('rate')"/></div>
         <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="40.0" oninput="autoFuel('litres')"/></div>
-        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — the 3rd calculates automatically</span></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="9940" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd calculates automatically</span></div>
         <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
       </div>
       <div class="form-group span-2"><label>Odometer Now (KM)</label><input id="f-odo2" type="number" placeholder="48320" oninput="calcKmpl()"/></div>
@@ -2071,42 +2071,30 @@ window.acSelect=function(inputId,val){
 document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))document.querySelectorAll('.ac-list').forEach(l=>l.classList.remove('open'));});
 
 // ── AUTO FUEL CALC (any 2 of rate/litres/cost fills 3rd) ─────────
+// Track which fields the user has actively typed in
+// ── FUEL AUTO CALC ───────────────────────────────────────────────
 window.autoFuel=function(changed){
   const rateEl=document.getElementById('f-rate');
   const litresEl=document.getElementById('f-litres');
   const costEl=document.getElementById('f-cost');
   if(!rateEl||!litresEl||!costEl)return;
-  // Read current values — treat empty string as null, not 0
-  const rateVal=rateEl.value.trim();
-  const litresVal=litresEl.value.trim();
-  const costVal=costEl.value.trim();
-  const rate=rateVal!==''?parseFloat(rateVal):null;
-  const litres=litresVal!==''?parseFloat(litresVal):null;
-  const cost=costVal!==''?parseFloat(costVal):null;
-  // Count how many are filled
-  const filled=[rate,litres,cost].filter(v=>v!==null&&v>0).length;
-  if(filled<2){calcKmpl();return;} // need at least 2 to calculate
-  // Calculate the one that is null/empty
-  if(rate!==null&&litres!==null&&cost===null){
-    // rate + litres → cost
-    costEl.value=(rate*litres).toFixed(0);
-  } else if(rate!==null&&cost!==null&&litres===null){
-    // rate + cost → litres
-    litresEl.value=(cost/rate).toFixed(2);
-  } else if(litres!==null&&cost!==null&&rate===null){
-    // litres + cost → rate
-    rateEl.value=(cost/litres).toFixed(2);
-  } else if(filled===3){
-    // All 3 filled — recalculate the one that WASN'T just changed
-    if(changed==='rate'||changed==='litres'){
-      // User typed rate or litres → update cost
-      costEl.value=(rate*litres).toFixed(0);
-    } else if(changed==='cost'){
-      // User typed cost → update rate (keep litres)
-      if(litres>0)rateEl.value=(cost/litres).toFixed(2);
-    }
+  const rate=rateEl.value!==''?parseFloat(rateEl.value):null;
+  const litres=litresEl.value!==''?parseFloat(litresEl.value):null;
+  const cost=costEl.value!==''?parseFloat(costEl.value):null;
+  if(changed==='rate'){
+    if(rate>0&&litres!==null&&litres>0)costEl.value=(rate*litres).toFixed(0);
+    else if(rate>0&&cost!==null&&cost>0)litresEl.value=(cost/rate).toFixed(2);
+  } else if(changed==='litres'){
+    if(litres>0&&rate!==null&&rate>0)costEl.value=(rate*litres).toFixed(0);
+    else if(litres>0&&cost!==null&&cost>0)rateEl.value=(cost/litres).toFixed(2);
+  } else if(changed==='cost'){
+    if(cost>0&&litres!==null&&litres>0)rateEl.value=(cost/litres).toFixed(2);
+    else if(cost>0&&rate!==null&&rate>0)litresEl.value=(cost/rate).toFixed(2);
   }
   calcKmpl();
+}
+function resetFuelFields(){
+  ['f-rate','f-litres','f-cost'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
 }
 
 window.onFillTypeChange=function(){
