@@ -483,13 +483,16 @@ window.FIREBASE_CONFIG = {
           <button class="btn btn-primary" onclick="showModal('fuel')"><i class="ti ti-plus"></i>Log Fill-up</button>
         </div>
       </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="fuel-car-filter"></div>
+      <!-- Month Summary Card -->
+      <div id="fuel-month-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"></div>
       <div class="chart-grid">
         <div class="chart-panel"><div class="section-head"><h2>KM/L Trend (Full Fills)</h2></div><canvas id="chart-fuel-trend"></canvas></div>
         <div class="chart-panel"><div class="section-head"><h2>Fuel Cost per Month (PKR)</h2></div><canvas id="chart-fuel-cost"></canvas></div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Car</th><th>Station</th><th>Type</th><th>Litres</th><th>PKR/L</th><th>Total (PKR)</th><th>Odometer</th><th>Distance</th><th>KM/L</th><th>Fill</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Date</th><th>Car</th><th>Station</th><th>Type</th><th>Litres</th><th>PKR/L</th><th>Total (PKR)</th><th>Odometer</th><th>Distance</th><th>Days Since</th><th>KM/L</th><th>Fill</th><th>Actions</th></tr></thead>
           <tbody id="fuel-tbody"></tbody>
         </table>
         <div style="padding:10px 14px;font-size:11px;color:var(--text3);border-top:1px solid var(--border)">
@@ -584,8 +587,31 @@ window.FIREBASE_CONFIG = {
 
     <!-- ── SMART INSIGHTS ── -->
     <div class="page" id="page-insights">
-      <div class="ph"><div class="ph-left"><h1>Smart Insights</h1><p>AI-powered analysis of your fleet</p></div></div>
-      <div class="insights-grid" id="insights-grid"><div class="empty-state"><i class="ti ti-bulb"></i><h3>Add some data first</h3><p>Insights appear once you have cars, fuel logs and service records.</p></div></div>
+      <div class="ph"><div class="ph-left"><h1>Smart Insights</h1><p>Analytics &amp; fleet performance</p></div></div>
+      <!-- Month Summary -->
+      <div class="section-head"><h2>This Month at a Glance</h2></div>
+      <div class="metrics" id="insights-month-summary" style="margin-top:8px"></div>
+      <!-- Charts -->
+      <div class="chart-grid">
+        <div class="chart-panel">
+          <div class="section-head"><h2>Cost per KM Trend (PKR/KM)</h2></div>
+          <canvas id="chart-cost-per-km" style="max-height:200px;margin-top:10px"></canvas>
+        </div>
+        <div class="chart-panel">
+          <div class="section-head"><h2>Days Between Fill-ups</h2></div>
+          <canvas id="chart-fill-freq" style="max-height:200px;margin-top:10px"></canvas>
+        </div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head"><h2>Fuel Station Comparison (Avg KM/L)</h2></div>
+        <canvas id="chart-station" style="max-height:200px;margin-top:10px"></canvas>
+      </div>
+      <!-- KM/L Gauges -->
+      <div class="section-head"><h2>KM/L Efficiency Gauges</h2></div>
+      <div id="insights-gauges" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:8px"></div>
+      <!-- Text Insights -->
+      <div class="section-head"><h2>Smart Alerts</h2></div>
+      <div class="insights-grid" id="insights-grid" style="margin-top:8px"><div class="empty-state"><i class="ti ti-bulb"></i><h3>Add some data first</h3><p>Insights appear once you have cars, fuel logs and service records.</p></div></div>
     </div>
 
     <!-- ── SERVICE TYPES ── -->
@@ -718,6 +744,7 @@ let cars=[], fuelLogs=[], serviceLogs=[], fuelPrices=[];
 let carsFilter='all';
 let dashCarId=null;
 let svcCarId=null;
+let fuelCarId=null;
 let chartInstances={};
 let DEFAULT_SVC_TYPES=['Oil Change','Oil Filter Change','Air Filter Change','Fuel Filter Change','Spark Plugs Change','Transmission Oil Change','Coolant / Radiator Flush','Engine Tune-up','Tyre Puncture Repair','Tyre Rotation','Tyre Balancing','Wheel Alignment','Tyre Replacement','Brake Pads Change','Brake Disc Change','Brake Oil Change','AC Filter Change','AC Gas Refill','AC Service / Cleaning','Battery Change','Battery Terminals Cleaning','Car Wash / Detailing','Windshield Wiper Change','Headlight / Bulb Change','Suspension Check','Steering Oil Change','General Inspection'];
 let svcTypes = JSON.parse(localStorage.getItem('fl_svc_types')||JSON.stringify(DEFAULT_SVC_TYPES));
@@ -850,6 +877,7 @@ function renderAll(){
   renderDashboard();renderCarList();renderFuelLog();renderServiceLog();
   renderPL();renderInstallments();renderFuelPrices();renderInsights();
   renderServiceTypes();renderNotifications();renderReminders();renderCharts();checkTokenAlerts();
+  buildFuelCarFilter();
 }
 
 // ── COST CALCULATION ENGINE ──────────────────────────────────────
@@ -1170,6 +1198,64 @@ function daysSince(dateStr){
   return Math.floor(diff/(1000*60*60*24));
 }
 
+// ── FUEL LOG CAR FILTER ──────────────────────────────────────────
+function buildFuelCarFilter(){
+  const wrap=document.getElementById('fuel-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(fuelCarId===null?'active':'')+'" onclick="setFuelCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(fuelCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setFuelCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+window.setFuelCar=function(carId,btn){
+  fuelCarId=carId;
+  document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderFuelLog();
+}
+
+function renderFuelMonthSummary(filteredLogs){
+  const el=document.getElementById('fuel-month-summary');
+  if(!el)return;
+  const now=new Date();
+  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisMonth=filteredLogs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
+  const totalCost=thisMonth.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const totalLitres=thisMonth.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const fullFills=filteredLogs.filter(f=>f.fillType==='full'&&f.kmpl>0);
+  const avgKmpl=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):null;
+  // Days between fills avg
+  const sortedFills=[...filteredLogs].filter(f=>!f.isMissed&&f.odometer).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let avgDays=null;
+  if(sortedFills.length>=2){
+    const gaps=[];
+    for(let i=1;i<sortedFills.length;i++){
+      const d=(new Date(sortedFills[i].date)-new Date(sortedFills[i-1].date))/(1000*60*60*24);
+      if(d>0)gaps.push(d);
+    }
+    avgDays=gaps.length?(gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(0):null;
+  }
+  const lastFill=sortedFills[sortedFills.length-1];
+  const daysSinceLast=lastFill?Math.floor((Date.now()-new Date(lastFill.date).getTime())/(1000*60*60*24)):null;
+
+  el.innerHTML=[
+    {label:'This Month Cost',val:totalCost>0?'₨'+fmtPKR(totalCost):'—',sub:'PKR',accent:'var(--gold)'},
+    {label:'This Month Litres',val:totalLitres>0?totalLitres.toFixed(1)+' L':'—',sub:'filled',accent:'var(--blue)'},
+    {label:'Avg KM/L',val:avgKmpl?avgKmpl+' KM/L':'—',sub:'full fills only',accent:'var(--green)'},
+    {label:'Avg Days/Fill',val:avgDays?avgDays+' days':'—',sub:'between fill-ups',accent:'var(--purple)'},
+    {label:'Last Fill',val:daysSinceLast!==null?daysSinceLast+' days ago':'—',sub:lastFill?lastFill.date:'',accent:'var(--amber)'},
+  ].map(m=>`<div class="metric" style="--accent:${m.accent}">
+    <div class="m-label">${m.label}</div>
+    <div class="m-val" style="font-size:18px;color:${m.accent}">${m.val}</div>
+    <div class="m-sub">${m.sub}</div>
+  </div>`).join('');
+}
+
 // ── SERVICE CAR FILTER ───────────────────────────────────────────
 function buildSvcCarFilter(){
   const wrap=document.getElementById('svc-car-filter');
@@ -1193,13 +1279,15 @@ window.setSvcCar=function(carId,btn){
 
 // ── FUEL LOG ──────────────────────────────────────────────────────
 function renderFuelLog(){
+  buildFuelCarFilter();
+  const filteredFuelLog=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  renderFuelMonthSummary(filteredFuelLog);
   const tbody=document.getElementById('fuel-tbody');
-  if(!fuelLogs.length){tbody.innerHTML=`<tr><td colspan="12"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
+  if(!filteredFuelLog.length){tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
 
   // Build per-car sorted fuel log to calculate distance on the fly
-  // Sort all logs by odometer ascending per car
   const carLogs={};
-  fuelLogs.forEach(f=>{
+  filteredFuelLog.forEach(f=>{
     if(!carLogs[f.carId])carLogs[f.carId]=[];
     carLogs[f.carId].push(f);
   });
@@ -1234,7 +1322,7 @@ function renderFuelLog(){
     return null;
   }
 
-  tbody.innerHTML=fuelLogs.map(f=>{
+  tbody.innerHTML=filteredFuelLog.map(f=>{
     const car=cars.find(c=>c.id===f.carId);
     const actionBtns=`<td style="white-space:nowrap">
         <button onclick="event.stopPropagation();editFuel('${f.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
@@ -1255,7 +1343,10 @@ function renderFuelLog(){
     const ppl=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
     const calcDist=getCalcDistance(f);
     const calcKmpl=getCalcKmpl(f);
-    const distWasCalc=calcDist&&!(f.distance&&parseFloat(f.distance)>0); // true if calculated not stored
+    const distWasCalc=calcDist&&!(f.distance&&parseFloat(f.distance)>0);
+    // Days since last refill for this car
+    const prevFuel=getPrevFuel(f);
+    const daysSincePrev=prevFuel?Math.round((new Date(f.date)-new Date(prevFuel.date))/(1000*60*60*24)):null;
     return`<tr>
       <td class="mono">${f.date}</td>
       <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
@@ -1266,6 +1357,7 @@ function renderFuelLog(){
       <td class="gold mono">₨${fmt(f.cost)}</td>
       <td class="mono">${fmtKM(f.odometer)} KM</td>
       <td class="mono ${distWasCalc?'amber':''}" title="${distWasCalc?'Auto-calculated from odometer difference':''}">${calcDist?fmtKM(calcDist)+' KM'+(distWasCalc?' *':''):'—'}</td>
+      <td class="mono" style="color:var(--text3)">${daysSincePrev!==null?daysSincePrev+' days':'—'}</td>
       <td class="${f.fillType==='full'&&calcKmpl?(calcKmpl>14?'green':calcKmpl>10?'amber':'red'):'blue'} mono">${calcKmpl?calcKmpl.toFixed(1)+(distWasCalc?' *':''):'~—'}</td>
       <td><span class="badge ${f.fillType==='full'?'full':'partial'}">${f.fillType==='full'?'Full':'Partial'}</span></td>
       ${actionBtns}
@@ -1750,8 +1842,91 @@ function mkChart(id,config){
   chartInstances[id]=new Chart(canvas,config);
 }
 
+// ── INSIGHT CHARTS ───────────────────────────────────────────────
+function renderInsightCharts(){
+  const d=chartDefaults();
+  const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}};
+
+  // 1. Cost per KM trend per car
+  const cpkData=cars.map(c=>{
+    const logs=[...fuelLogs].filter(f=>f.carId===c.id&&!f.isMissed);
+    const totalCost=logs.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const odoSpan=getTrueOdo(c.id)-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
+    return{name:c.make+' '+c.model,cpk:odoSpan>0?(totalCost/odoSpan).toFixed(2):0};
+  }).filter(x=>x.cpk>0);
+  mkChart('chart-cost-per-km',{type:'bar',data:{labels:cpkData.map(x=>x.name),datasets:[{label:'PKR per KM',data:cpkData.map(x=>x.cpk),backgroundColor:COLORS.slice(0,cpkData.length).map(c=>c+'cc'),borderRadius:6}]},options:baseOpts});
+
+  // 2. Days between fill-ups per car
+  const freqDatasets=cars.map((c,i)=>{
+    const logs=[...fuelLogs].filter(f=>f.carId===c.id&&!f.isMissed&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const gaps=[];
+    for(let j=1;j<logs.length;j++){
+      const days=(new Date(logs[j].date)-new Date(logs[j-1].date))/(1000*60*60*24);
+      if(days>0)gaps.push({date:logs[j].date.slice(5),days:Math.round(days)});
+    }
+    return{label:c.make+' '+c.model,data:gaps.map(g=>g.days),dates:gaps.map(g=>g.date),color:COLORS[i%COLORS.length]};
+  }).filter(x=>x.data.length>0);
+  if(freqDatasets.length){
+    const allDates=[...new Set(freqDatasets.flatMap(x=>x.dates))].sort();
+    mkChart('chart-fill-freq',{type:'line',data:{labels:allDates,datasets:freqDatasets.map(ds=>({label:ds.label,data:allDates.map(d=>{const i=ds.dates.indexOf(d);return i>=0?ds.data[i]:null;}),borderColor:ds.color,backgroundColor:ds.color+'22',tension:0.3,pointRadius:4,fill:false}))},options:{...baseOpts,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}}}});
+  }
+
+  // 3. Fuel station comparison (avg KM/L)
+  const stationMap={};
+  fuelLogs.filter(f=>f.station&&f.fillType==='full'&&f.kmpl>0).forEach(f=>{
+    if(!stationMap[f.station])stationMap[f.station]={total:0,count:0};
+    stationMap[f.station].total+=f.kmpl;stationMap[f.station].count++;
+  });
+  const stations=Object.entries(stationMap).map(([n,v])=>({name:n,avg:(v.total/v.count).toFixed(2)})).sort((a,b)=>b.avg-a.avg);
+  if(stations.length){
+    mkChart('chart-station',{type:'bar',data:{labels:stations.map(s=>s.name),datasets:[{label:'Avg KM/L',data:stations.map(s=>s.avg),backgroundColor:stations.map((_,i)=>COLORS[i%COLORS.length]+'cc'),borderRadius:6}]},options:baseOpts});
+  }
+
+  // 4. KM/L Gauges per car
+  const gaugesEl=document.getElementById('insights-gauges');
+  if(gaugesEl){
+    gaugesEl.innerHTML=cars.map((c,i)=>{
+      const fills=fuelLogs.filter(f=>f.carId===c.id&&f.fillType==='full'&&f.kmpl>0);
+      if(!fills.length)return'';
+      const avg=fills.reduce((a,b)=>a+b.kmpl,0)/fills.length;
+      const max=18; // reference max KM/L
+      const pct=Math.min(100,(avg/max)*100);
+      const col=avg>12?'var(--green)':avg>8?'var(--amber)':'var(--red)';
+      const label=avg>12?'Efficient':avg>8?'Average':'Below Avg';
+      return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px">${c.make} ${c.model}</div>
+        <div style="position:relative;width:120px;height:60px;margin:0 auto;overflow:hidden">
+          <div style="position:absolute;width:120px;height:120px;border-radius:50%;border:10px solid var(--bg4);top:0;left:0;clip:rect(0,120px,60px,0)"></div>
+          <div style="position:absolute;width:120px;height:120px;border-radius:50%;border:10px solid ${col};top:0;left:0;clip:rect(0,120px,60px,0);transform:rotate(${pct*1.8}deg);transform-origin:60px 60px;transition:transform 0.5s"></div>
+          <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);font-size:18px;font-weight:700;color:${col}">${avg.toFixed(1)}</div>
+        </div>
+        <div style="font-size:11px;color:${col};margin-top:6px;font-weight:600">${label}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">KM/L • ${fills.length} fills</div>
+      </div>`;
+    }).filter(Boolean).join('');
+  }
+
+  // 5. Month summary for insights page
+  const summaryEl=document.getElementById('insights-month-summary');
+  if(summaryEl){
+    const now=new Date();
+    const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const mFuel=fuelLogs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
+    const mSvc=serviceLogs.filter(s=>s.date&&s.date.startsWith(ym));
+    const totalKm=cars.reduce((a,c)=>a+getTrueOdo(c.id)-(c.odoAtPurchase!==null?parseFloat(c.odoAtPurchase||0):0),0);
+    summaryEl.innerHTML=[
+      {label:'Fuel Spend',val:'₨'+fmtPKR(mFuel.reduce((a,b)=>a+(parseFloat(b.cost)||0),0)),sub:'this month',accent:'var(--gold)'},
+      {label:'Litres Consumed',val:mFuel.reduce((a,b)=>a+(parseFloat(b.litres)||0),0).toFixed(1)+' L',sub:'this month',accent:'var(--blue)'},
+      {label:'Service Cost',val:'₨'+fmtPKR(mSvc.reduce((a,b)=>a+(parseFloat(b.cost)||0),0)),sub:'this month',accent:'var(--purple)'},
+      {label:'Total KM (All Cars)',val:fmtKM(Math.round(totalKm))+' KM',sub:'since purchase',accent:'var(--green)'},
+      {label:'Fill-ups This Month',val:mFuel.length,sub:'across all cars',accent:'var(--amber)'},
+    ].map(m=>`<div class="metric" style="--accent:${m.accent}"><div class="m-label">${m.label}</div><div class="m-val" style="color:${m.accent};font-size:20px">${m.val}</div><div class="m-sub">${m.sub}</div></div>`).join('');
+  }
+}
+
 function renderCharts(){
   renderMOMChart();
+  renderInsightCharts();
   const d=chartDefaults();
   const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}}}};
 
@@ -2379,38 +2554,46 @@ window.exportDashboardPDF=function(){
 window.exportFuelLogPDF=function(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF('l');
-  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log',14,18);
+  const exportLogs=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  const carName=fuelCarId?cars.find(c=>c.id===fuelCarId)?.make+' '+cars.find(c=>c.id===fuelCarId)?.model:'All Cars';
+  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log ('+carName+')',14,18);
   doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
-  const rows=fuelLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`:'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
+  const rows=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`:'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
   doc.autoTable({startY:32,head:[['Date','Car','Station','Type','Litres','PKR/L','Total','ODO','Distance','KM/L']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]}});
-  doc.save('FuelLog_'+new Date().toISOString().slice(0,10)+'.pdf');
+  doc.save('FuelLog_'+(fuelCarId?carName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.pdf');
   showToast('PDF exported!');
 }
 
 window.exportServiceLogPDF=function(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF('l');
-  doc.setFontSize(16);doc.text('FleetLedger — Service Log',14,18);
+  const exportSvc=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
+  const svcCarName=svcCarId?cars.find(c=>c.id===svcCarId)?.make+' '+cars.find(c=>c.id===svcCarId)?.model:'All Cars';
+  doc.setFontSize(16);doc.text('FleetLedger — Service Log ('+svcCarName+')',14,18);
   doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
-  const rows=serviceLogs.map(s=>{const c=cars.find(x=>x.id===s.carId);const kl=kmLeft(s);const ds=daysSince(s.date);return[s.date,c?`${c.make} ${c.model}`:'',s.type,s.station||'—',s.cost?'₨'+parseFloat(s.cost).toLocaleString():'—',s.odometer?parseFloat(s.odometer).toLocaleString()+' KM':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue':kl.toLocaleString()+' KM',ds!==null?ds+' days':'—',svcStatus(s).toUpperCase()];});
+  const rows=exportSvc.map(s=>{const c=cars.find(x=>x.id===s.carId);const kl=kmLeft(s);const ds=daysSince(s.date);return[s.date,c?`${c.make} ${c.model}`:'',s.type,s.station||'—',s.cost?'₨'+parseFloat(s.cost).toLocaleString():'—',s.odometer?parseFloat(s.odometer).toLocaleString()+' KM':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue':kl.toLocaleString()+' KM',ds!==null?ds+' days':'—',svcStatus(s).toUpperCase()];});
   doc.autoTable({startY:32,head:[['Date','Car','Service','Station','Cost','ODO','Next Due','KM Left','Days Since','Status']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]},didParseCell:function(data){if(data.section==='body'&&data.column.index===9){const v=data.cell.raw;if(v==='OVERDUE')data.cell.styles.textColor=[248,113,113];else if(v==='DUE-SOON')data.cell.styles.textColor=[251,191,36];else data.cell.styles.textColor=[74,222,128];}}});
-  doc.save('ServiceLog_'+new Date().toISOString().slice(0,10)+'.pdf');
+  doc.save('ServiceLog_'+(svcCarId?svcCarName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.pdf');
   showToast('PDF exported!');
 }
 
 window.exportFuelLog=function(){
   const wb=XLSX.utils.book_new();
-  const data=fuelLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);return{Date:f.date,Car:c?`${c.make} ${c.model}`:'',Station:f.station,'Fill Type':f.fillType,'Fuel Type':f.fuelType,'Litres':f.litres,'Cost (PKR)':f.cost,'PKR/L':f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'','Odometer (KM)':f.odometer,'Distance (KM)':f.distance,'KM/L':f.kmpl};});
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),'Fuel Log');
-  XLSX.writeFile(wb,'FuelLog_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  const exportLogs=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  const carName=fuelCarId?cars.find(c=>c.id===fuelCarId)?.make+' '+cars.find(c=>c.id===fuelCarId)?.model:'All Cars';
+  const data=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);return{Date:f.date,Car:c?`${c.make} ${c.model}`:'',Station:f.station,'Fill Type':f.fillType,'Fuel Type':f.fuelType,'Litres':f.litres,'Cost (PKR)':f.cost,'PKR/L':f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'','Odometer (KM)':f.odometer,'Distance (KM)':f.distance,'KM/L':f.kmpl};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),carName.slice(0,30));
+  XLSX.writeFile(wb,'FuelLog_'+(fuelCarId?carName.replace(/ /g,'_')+'_':'')+ new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Fuel log exported!');
 }
 
 window.exportServiceLog=function(){
   const wb=XLSX.utils.book_new();
-  const data=serviceLogs.map(s=>{const c=cars.find(x=>x.id===s.carId);return{Date:s.date,Car:c?`${c.make} ${c.model}`:'',Service:s.type,'Cost (PKR)':s.cost,'Odometer (KM)':s.odometer,'Next Due (KM)':s.nextDueOdo,'Days Since':daysSince(s.date),Notes:s.notes};});
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),'Service Log');
-  XLSX.writeFile(wb,'ServiceLog_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  const exportSvc=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
+  const svcCarName=svcCarId?cars.find(c=>c.id===svcCarId)?.make+' '+cars.find(c=>c.id===svcCarId)?.model:'All Cars';
+  const data=exportSvc.map(s=>{const c=cars.find(x=>x.id===s.carId);return{Date:s.date,Car:c?`${c.make} ${c.model}`:'',Service:s.type,'Cost (PKR)':s.cost,'Odometer (KM)':s.odometer,'Next Due (KM)':s.nextDueOdo,'Days Since':daysSince(s.date),Notes:s.notes};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),(svcCarName||'Service').slice(0,30));
+  XLSX.writeFile(wb,'ServiceLog_'+(svcCarId?svcCarName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Service log exported!');
 }
 
