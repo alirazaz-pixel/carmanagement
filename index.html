@@ -1200,84 +1200,13 @@ function daysSince(dateStr){
   return Math.floor(diff/(1000*60*60*24));
 }
 
-// ── FUEL LOG CAR FILTER ──────────────────────────────────────────
-function buildFuelCarFilter(){
-  const wrap=document.getElementById('fuel-car-filter');
-  if(!wrap)return;
-  wrap.innerHTML='<button class="tab-btn '+(fuelCarId===null?'active':'')+'" onclick="setFuelCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
-  cars.forEach(c=>{
-    const btn=document.createElement('button');
-    btn.className='tab-btn'+(fuelCarId===c.id?' active':'');
-    btn.style.cssText='font-size:12px;padding:5px 12px';
-    btn.textContent=c.make+' '+c.model;
-    btn.onclick=function(){setFuelCar(c.id,this);};
-    wrap.appendChild(btn);
-  });
-}
-window.setFuelCar=function(carId,btn){
-  fuelCarId=carId;
-  document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
-  if(btn)btn.classList.add('active');
-  renderFuelLog();
-}
-
-function renderFuelMonthSummary(filteredLogs){
-  const el=document.getElementById('fuel-month-summary');
-  if(!el)return;
-  const now=new Date();
-  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const thisMonth=filteredLogs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
-  const totalCost=thisMonth.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const totalLitres=thisMonth.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
-  const fullFills=filteredLogs.filter(f=>f.fillType==='full'&&f.kmpl>0);
-  const avgKmpl=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):null;
-  // Days between fills avg
-  const sortedFills=[...filteredLogs].filter(f=>!f.isMissed&&f.odometer).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  let avgDays=null;
-  if(sortedFills.length>=2){
-    const gaps=[];
-    for(let i=1;i<sortedFills.length;i++){
-      const d=(new Date(sortedFills[i].date)-new Date(sortedFills[i-1].date))/(1000*60*60*24);
-      if(d>0)gaps.push(d);
-    }
-    avgDays=gaps.length?(gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(0):null;
-  }
-  const lastFill=sortedFills[sortedFills.length-1];
-  const daysSinceLast=lastFill?Math.floor((Date.now()-new Date(lastFill.date).getTime())/(1000*60*60*24)):null;
-
-  el.innerHTML=[
-    {label:'This Month Cost',val:totalCost>0?'₨'+fmtPKR(totalCost):'—',sub:'PKR',accent:'var(--gold)'},
-    {label:'This Month Litres',val:totalLitres>0?totalLitres.toFixed(1)+' L':'—',sub:'filled',accent:'var(--blue)'},
-    {label:'Avg KM/L',val:avgKmpl?avgKmpl+' KM/L':'—',sub:'full fills only',accent:'var(--green)'},
-    {label:'Avg Days/Fill',val:avgDays?avgDays+' days':'—',sub:'between fill-ups',accent:'var(--purple)'},
-    {label:'Last Fill',val:daysSinceLast!==null?daysSinceLast+' days ago':'—',sub:lastFill?lastFill.date:'',accent:'var(--amber)'},
-  ].map(m=>`<div class="metric" style="--accent:${m.accent}">
-    <div class="m-label">${m.label}</div>
-    <div class="m-val" style="font-size:18px;color:${m.accent}">${m.val}</div>
-    <div class="m-sub">${m.sub}</div>
-  </div>`).join('');
-}
-
 // ── SERVICE CAR FILTER ───────────────────────────────────────────
 function buildSvcCarFilter(){
-  const wrap=document.getElementById('svc-car-filter');
-  if(!wrap)return;
+  const wrap=document.getElementById('svc-car-filter');if(!wrap)return;
   wrap.innerHTML='<button class="tab-btn '+(svcCarId===null?'active':'')+'" onclick="setSvcCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
-  cars.forEach(c=>{
-    const btn=document.createElement('button');
-    btn.className='tab-btn'+(svcCarId===c.id?' active':'');
-    btn.style.cssText='font-size:12px;padding:5px 12px';
-    btn.textContent=c.make+' '+c.model;
-    btn.onclick=function(){setSvcCar(c.id,this);};
-    wrap.appendChild(btn);
-  });
+  cars.forEach(c=>{const btn=document.createElement('button');btn.className='tab-btn'+(svcCarId===c.id?' active':'');btn.style.cssText='font-size:12px;padding:5px 12px';btn.textContent=c.make+' '+c.model;btn.onclick=function(){setSvcCar(c.id,this);};wrap.appendChild(btn);});
 }
-window.setSvcCar=function(carId,btn){
-  svcCarId=carId;
-  document.querySelectorAll('#svc-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
-  if(btn)btn.classList.add('active');
-  renderServiceLog();
-}
+window.setSvcCar=function(carId,btn){svcCarId=carId;document.querySelectorAll('#svc-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderServiceLog();}
 
 // ── FUEL LOG CAR FILTER ──────────────────────────────────────────
 function buildFuelCarFilter(){
