@@ -2019,9 +2019,9 @@ window.showModal=function(type,data={}){
         <div class="form-group"><label>Fuel Type</label>
           <select id="f-ftype2"><option ${(data.fuelType||'')=='RON-92'?'selected':''}>RON-92</option><option ${data.fuelType==='RON-95'?'selected':''}>RON-95</option><option ${data.fuelType==='HSD'?'selected':''}>HSD</option><option ${data.fuelType==='CNG'?'selected':''}>CNG</option></select>
         </div>
-        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="e.g. 299.48" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')" data-typed="no"/></div>
-        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="e.g. 40.5" value="${data.litres||''}" oninput="autoFuel('litres')" data-typed="no"/></div>
-        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="e.g. 9940" value="${data.cost||''}" oninput="autoFuel('cost')" data-typed="no"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
+        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="Rate per litre" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')" data-typed="no"/></div>
+        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="Litres filled" value="${data.litres||''}" oninput="autoFuel('litres')" data-typed="no"/></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="Total cost PKR" value="${data.cost||''}" oninput="autoFuel('cost')" data-typed="no"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
         <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" value="${data.distance||''}" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
       </div>
       <div class="form-group span-2">
@@ -2117,10 +2117,10 @@ window.showModal=function(type,data={}){
       if(!data||!data.id){
         ['f-rate','f-litres','f-cost'].forEach(id=>{
           const el=document.getElementById(id);
-          if(el)el.value='';
+          if(el){el.value='';el.setAttribute('value','');}
         });
       }
-    },10);
+    },50);
   }
 }
 
@@ -2293,18 +2293,21 @@ window.autoFuel=function(changed){
   const lEl=document.getElementById('f-litres');
   const cEl=document.getElementById('f-cost');
   if(!rEl||!lEl||!cEl)return;
-  const rEmpty=rEl.value.trim()==='';
-  const lEmpty=lEl.value.trim()==='';
-  const cEmpty=cEl.value.trim()==='';
-  const r=parseFloat(rEl.value)||0;
-  const l=parseFloat(lEl.value)||0;
-  const c=parseFloat(cEl.value)||0;
-  if(rEmpty&&!lEmpty&&!cEmpty){ if(l>0&&c>0)rEl.value=(c/l).toFixed(2); }
-  else if(lEmpty&&!rEmpty&&!cEmpty){ if(r>0&&c>0)lEl.value=(c/r).toFixed(2); }
-  else if(cEmpty&&!rEmpty&&!lEmpty){ if(r>0&&l>0)cEl.value=(r*l).toFixed(0); }
-  else if(!rEmpty&&!lEmpty&&!cEmpty){
-    if(changed==='rate'||changed==='litres'){ if(r>0&&l>0)cEl.value=(r*l).toFixed(0); }
-    else if(changed==='cost'){ if(c>0&&l>0)rEl.value=(c/l).toFixed(2); }
+  const r=rEl.value.trim()===''?null:parseFloat(rEl.value);
+  const l=lEl.value.trim()===''?null:parseFloat(lEl.value);
+  const c=cEl.value.trim()===''?null:parseFloat(cEl.value);
+  // null = empty field, calculate it
+  // Rule: whichever field is null gets calculated from the other two
+  if(r===null && l!==null && c!==null && l>0 && c>0){
+    rEl.value=(c/l).toFixed(2); // rate = cost / litres
+  } else if(l===null && r!==null && c!==null && r>0 && c>0){
+    lEl.value=(c/r).toFixed(2); // litres = cost / rate ← YOUR CASE
+  } else if(c===null && r!==null && l!==null && r>0 && l>0){
+    cEl.value=(r*l).toFixed(0); // cost = rate × litres
+  } else if(r!==null && l!==null && c!==null){
+    // All filled - recalculate the non-active field
+    if(changed==='rate'||changed==='litres'){if(r>0&&l>0)cEl.value=(r*l).toFixed(0);}
+    else if(changed==='cost'){if(c>0&&r>0)lEl.value=(c/r).toFixed(2);}
   }
   calcKmpl();
 }
