@@ -2055,9 +2055,9 @@ window.showModal=function(type,data={}){
         <div class="form-group"><label>Fuel Type</label>
           <select id="f-ftype2"><option ${(data.fuelType||'')=='RON-92'?'selected':''}>RON-92</option><option ${data.fuelType==='RON-95'?'selected':''}>RON-95</option><option ${data.fuelType==='HSD'?'selected':''}>HSD</option><option ${data.fuelType==='CNG'?'selected':''}>CNG</option></select>
         </div>
-        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="e.g. 299.48" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')" data-typed="no"/></div>
-        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="e.g. 40.5" value="${data.litres||''}" oninput="autoFuel('litres')" data-typed="no"/></div>
-        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="e.g. 9940" value="${data.cost||''}" oninput="autoFuel('cost')" data-typed="no"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
+        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="e.g. 299.48" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')"/></div>
+        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="e.g. 40.5" value="${data.litres||''}" oninput="autoFuel('litres')"/></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="e.g. 9940" value="${data.cost||''}" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
         <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" value="${data.distance||''}" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
       </div>
       <div class="form-group span-2">
@@ -2147,23 +2147,7 @@ window.showModal=function(type,data={}){
 
   modal.innerHTML=html;
   overlay.classList.add('open');
-  // For fuel edit: mark pre-filled fields as user-typed after render
-  if(type==='fuel'&&data&&data.id){
-    setTimeout(()=>{
-      if(data.cost&&data.litres){
-        const r=document.getElementById('f-rate');
-        if(r&&r.value)r.dataset.typed='yes';
-      }
-      if(data.litres){
-        const l=document.getElementById('f-litres');
-        if(l&&l.value)l.dataset.typed='yes';
-      }
-      if(data.cost){
-        const c=document.getElementById('f-cost');
-        if(c&&c.value)c.dataset.typed='yes';
-      }
-    },50);
-  }
+
 }
 
 window.closeModal=function(){document.getElementById('modal-overlay').classList.remove('open');}
@@ -2362,76 +2346,2712 @@ window.autoCalcDistance=function(){
 }
 
 // ── FUEL AUTO CALC ───────────────────────────────────────────────
-// Track which fields the USER typed (not auto-calculated)
-// data-typed="yes" = user typed it, never overwrite
-// data-typed="no"  = auto-calculated or empty, safe to overwrite
+// Simple rule: find the ONE empty field and calculate it.
+// The field being typed is never empty, so it is never overwritten.
 
 window.autoFuel=function(changed){
-  const rateEl=document.getElementById('f-rate');
-  const litresEl=document.getElementById('f-litres');
-  const costEl=document.getElementById('f-cost');
-  if(!rateEl||!litresEl||!costEl)return;
+  const rEl=document.getElementById('f-rate');
+  const lEl=document.getElementById('f-litres');
+  const cEl=document.getElementById('f-cost');
+  if(!rEl||!lEl||!cEl)return;
 
-  // Mark this field as user-typed — NEVER overwrite it
-  if(changed==='rate')rateEl.dataset.typed='yes';
-  else if(changed==='litres')litresEl.dataset.typed='yes';
-  else if(changed==='cost')costEl.dataset.typed='yes';
+  const rEmpty=rEl.value.trim()==='';
+  const lEmpty=lEl.value.trim()==='';
+  const cEmpty=cEl.value.trim()==='';
 
-  // Clear this field's value triggers auto-clear typed status
-  if(changed==='rate'&&rateEl.value==='')rateEl.dataset.typed='no';
-  if(changed==='litres'&&litresEl.value==='')litresEl.dataset.typed='no';
-  if(changed==='cost'&&costEl.value==='')costEl.dataset.typed='no';
+  const r=parseFloat(rEl.value)||0;
+  const l=parseFloat(lEl.value)||0;
+  const c=parseFloat(cEl.value)||0;
 
-  const rateTyped=rateEl.dataset.typed==='yes';
-  const litresTyped=litresEl.dataset.typed==='yes';
-  const costTyped=costEl.dataset.typed==='yes';
-
-  const rate=rateEl.value!==''?parseFloat(rateEl.value):null;
-  const litres=litresEl.value!==''?parseFloat(litresEl.value):null;
-  const cost=costEl.value!==''?parseFloat(costEl.value):null;
-
-  // Only calculate a field if it was NOT typed by user
-  // Rule: exactly identify the "target" field (not typed, not the one just changed)
-
-  if(rateTyped&&litresTyped&&!costTyped){
-    // User typed rate AND litres → calculate cost
-    if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
+  // Exactly one field empty → calculate it
+  if(rEmpty && !lEmpty && !cEmpty){
+    // rate is empty → rate = cost / litres
+    if(l>0&&c>0) rEl.value=(c/l).toFixed(2);
   }
-  else if(rateTyped&&costTyped&&!litresTyped){
-    // User typed rate AND cost → calculate litres
-    if(rate>0&&cost>0)litresEl.value=(cost/rate).toFixed(2);
+  else if(lEmpty && !rEmpty && !cEmpty){
+    // litres is empty → litres = cost / rate
+    if(r>0&&c>0) lEl.value=(c/r).toFixed(2);
   }
-  else if(litresTyped&&costTyped&&!rateTyped){
-    // User typed litres AND cost → calculate rate
-    if(litres>0&&cost>0)rateEl.value=(cost/litres).toFixed(2);
+  else if(cEmpty && !rEmpty && !lEmpty){
+    // cost is empty → cost = rate × litres
+    if(r>0&&l>0) cEl.value=(r*l).toFixed(0);
   }
-  // If all 3 are user-typed (user manually edited a previously auto field),
-  // recalculate only the non-changed field that was auto-calculated
-  else if(rateTyped&&litresTyped&&costTyped){
+  // All three filled: user edited one → recalculate cost (safest)
+  else if(!rEmpty&&!lEmpty&&!cEmpty){
     if(changed==='rate'||changed==='litres'){
-      if(rate>0&&litres>0)costEl.value=(rate*litres).toFixed(0);
+      if(r>0&&l>0) cEl.value=(r*l).toFixed(0);
     } else if(changed==='cost'){
-      if(cost>0&&litres>0)rateEl.value=(cost/litres).toFixed(2);
+      if(c>0&&l>0) rEl.value=(c/l).toFixed(2);
     }
   }
-
   calcKmpl();
 }
 
-function resetFuelFields(){
+
+
+window.onFillTypeChange=function(){
+  const type=document.getElementById('f-fill-type')?.value;
+  const fuelMain=document.getElementById('f-fuel-main');
+  const missedNote=document.getElementById('f-missed-note');
+  const kmplPrev=document.getElementById('kmpl-preview');
+  if(type==='missed'){
+    if(fuelMain)fuelMain.style.display='none';
+    if(missedNote)missedNote.style.display='block';
+    if(kmplPrev)kmplPrev.style.display='none';
+  } else {
+    if(fuelMain)fuelMain.style.display='contents';
+    if(missedNote)missedNote.style.display='none';
+  }
+}
+
+// ── KM/L PREVIEW ──────────────────────────────────────────────────
+window.calcKmpl=function(){
+  const litres=n('f-litres');const dist=n('f-dist');
+  const preview=document.getElementById('kmpl-preview');
+  const val=document.getElementById('kmpl-val');
+  if(litres>0&&dist>0){
+    const kmpl=(dist/litres).toFixed(2);
+    val.textContent=kmpl;
+    preview.style.display='block';
+  }else{preview.style.display='none';}
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────
+window.exportAll=function(){
+  const wb=XLSX.utils.book_new();
+  const carData=cars.map(c=>({Make:c.make,Model:c.model,Year:c.year,Reg:c.reg,Status:c.status,Odometer:c.odometer,'Bought (PKR)':c.boughtAt,'Sold (PKR)':c.soldAt||'','Token Date':c.tokenDate||''}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(carData),'Cars');
+  const fuelData=fuelLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);return{Date:f.date,Car:c?`${c.make} ${c.model}`:'',Station:f.station,Type:f.fillType,'Litres':f.litres,'Cost (PKR)':f.cost,'Odometer (KM)':f.odometer,'Distance (KM)':f.distance,'KM/L':f.kmpl};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(fuelData),'Fuel Log');
+  const svcData=serviceLogs.map(s=>{const c=cars.find(x=>x.id===s.carId);return{Date:s.date,Car:c?`${c.make} ${c.model}`:'',Service:s.type,'Cost (PKR)':s.cost,'Odometer (KM)':s.odometer,'Next Due (KM)':s.nextDueOdo,Notes:s.notes};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(svcData),'Service Log');
+  const fpData=fuelPrices.map(p=>({Date:p.date,'RON-92':p.ron92,'RON-95':p.ron95,'HSD':p.hsd,'CNG':p.cng,Source:p.source}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(fpData),'Fuel Prices');
+  XLSX.writeFile(wb,'FleetLedger_Export_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('Excel exported!');
+}
+
+window.exportDashboardPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  let y=18;
+  doc.setFontSize(18);doc.setTextColor(232,196,74);doc.text('FleetLedger — Full Fleet Report',14,y);
+  y+=8;doc.setFontSize(10);doc.setTextColor(150,150,180);doc.text('Generated: '+new Date().toLocaleDateString()+' | Total Cars: '+cars.length,14,y);
+  y+=10;
+
+  cars.forEach((c,idx)=>{
+    if(y>240){doc.addPage();y=18;}
+    // Car header
+    doc.setFillColor(15,15,26);doc.rect(0,y-4,220,14,'F');
+    doc.setFontSize(13);doc.setTextColor(232,196,74);
+    doc.text((idx+1)+'. '+c.make+' '+c.model+' '+c.year+' — '+c.reg,14,y+5);
+    doc.setTextColor(150,150,180);doc.setFontSize(9);
+    doc.text(c.status.toUpperCase()+(c.hasInstallment?' | INSTALLMENT':''),180,y+5);
+    y+=16;
+
+    // Car details
+    doc.setTextColor(200,200,220);doc.setFontSize(9);
+    const details=[
+      ['Colour',c.color||'—'],['Fuel Type',c.fuelType||'—'],
+      ['Odo at Purchase',c.odoAtPurchase?parseFloat(c.odoAtPurchase).toLocaleString()+' KM':'—'],
+      ['Current Odometer',c.odometer?parseFloat(c.odometer).toLocaleString()+' KM':'—'],
+      ['Bought For','PKR '+parseFloat(c.boughtAt||0).toLocaleString()],
+      ['Purchase Date',c.purchaseDate||'—'],
+    ];
+    if(c.hasInstallment){
+      details.push(['EMI','PKR '+parseFloat(c.monthlyEMI||0).toLocaleString()+'/mo']);
+      details.push(['Months Left',c.monthsLeft||'—']);
+    }
+    if(c.status==='sold'){
+      details.push(['Sold For','PKR '+parseFloat(c.soldAt||0).toLocaleString()]);
+      details.push(['Sell Date',c.sellDate||'—']);
+      const pl=parseFloat(c.soldAt||0)-parseFloat(c.boughtAt||0);
+      details.push(['Profit/Loss',(pl>=0?'+':'')+'PKR '+pl.toLocaleString()]);
+    }
+    details.forEach((d,i)=>{
+      const col=i%2===0?14:110;const row=Math.floor(i/2);
+      doc.setTextColor(150,150,180);doc.text(d[0]+':',col,y+row*7);
+      doc.setTextColor(220,220,240);doc.text(d[1],col+40,y+row*7);
+    });
+    y+=Math.ceil(details.length/2)*7+4;
+
+    // Fuel summary
+    const carFuel=fuelLogs.filter(f=>f.carId===c.id);
+    const fullFills=carFuel.filter(f=>f.fillType==='full'&&f.kmpl>0);
+    const avgKmpl=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):'—';
+    const totalFuelCost=carFuel.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    doc.setTextColor(96,165,250);doc.text('Fuel: Avg '+avgKmpl+' KM/L | Total spent: PKR '+totalFuelCost.toLocaleString()+' | '+carFuel.length+' fill-ups',14,y);
+    y+=7;
+
+    // Service summary
+    const carSvc=serviceLogs.filter(s=>s.carId===c.id);
+    const totalSvcCost=carSvc.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    doc.setTextColor(74,222,128);doc.text('Service: '+carSvc.length+' records | Total spent: PKR '+totalSvcCost.toLocaleString(),14,y);
+    y+=7;
+
+    // Upcoming services
+    const latest={};
+    [...carSvc].reverse().forEach(s=>{if(!latest[s.type])latest[s.type]=s;});
+    const upcoming=Object.values(latest).filter(s=>svcStatus(s)!=='ok').slice(0,3);
+    if(upcoming.length){
+      doc.setTextColor(251,191,36);doc.text('⚠ Alerts: '+upcoming.map(s=>{const kl=kmLeft(s);return s.type+(kl!==null?(kl<0?' OVERDUE':' '+kl.toLocaleString()+'KM left'):'');}).join(' | '),14,y);
+      y+=7;
+    }
+
+    y+=6;
+    // Divider
+    doc.setDrawColor(40,40,60);doc.line(14,y,196,y);y+=8;
+  });
+
+  doc.save('FleetLedger_Report_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('Fleet PDF downloaded!');
+}
+
+window.exportFuelLogPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF('l');
+  const exportLogs=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  const carName=fuelCarId?cars.find(c=>c.id===fuelCarId)?.make+' '+cars.find(c=>c.id===fuelCarId)?.model:'All Cars';
+  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log ('+carName+')',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const rows=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`:'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
+  doc.autoTable({startY:32,head:[['Date','Car','Station','Type','Litres','PKR/L','Total','ODO','Distance','KM/L']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]}});
+  doc.save('FuelLog_'+(fuelCarId?carName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
+window.exportServiceLogPDF=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF('l');
+  const exportSvc=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
+  const svcCarName=svcCarId?cars.find(c=>c.id===svcCarId)?.make+' '+cars.find(c=>c.id===svcCarId)?.model:'All Cars';
+  doc.setFontSize(16);doc.text('FleetLedger — Service Log ('+svcCarName+')',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const rows=exportSvc.map(s=>{const c=cars.find(x=>x.id===s.carId);const kl=kmLeft(s);const ds=daysSince(s.date);return[s.date,c?`${c.make} ${c.model}`:'',s.type,s.station||'—',s.cost?'₨'+parseFloat(s.cost).toLocaleString():'—',s.odometer?parseFloat(s.odometer).toLocaleString()+' KM':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue':kl.toLocaleString()+' KM',ds!==null?ds+' days':'—',svcStatus(s).toUpperCase()];});
+  doc.autoTable({startY:32,head:[['Date','Car','Service','Station','Cost','ODO','Next Due','KM Left','Days Since','Status']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]},didParseCell:function(data){if(data.section==='body'&&data.column.index===9){const v=data.cell.raw;if(v==='OVERDUE')data.cell.styles.textColor=[248,113,113];else if(v==='DUE-SOON')data.cell.styles.textColor=[251,191,36];else data.cell.styles.textColor=[74,222,128];}}});
+  doc.save('ServiceLog_'+(svcCarId?svcCarName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
+window.exportFuelLog=function(){
+  const wb=XLSX.utils.book_new();
+  const exportLogs=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  const carName=fuelCarId?cars.find(c=>c.id===fuelCarId)?.make+' '+cars.find(c=>c.id===fuelCarId)?.model:'All Cars';
+  const data=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);return{Date:f.date,Car:c?`${c.make} ${c.model}`:'',Station:f.station,'Fill Type':f.fillType,'Fuel Type':f.fuelType,'Litres':f.litres,'Cost (PKR)':f.cost,'PKR/L':f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'','Odometer (KM)':f.odometer,'Distance (KM)':f.distance,'KM/L':f.kmpl};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),carName.slice(0,30));
+  XLSX.writeFile(wb,'FuelLog_'+(fuelCarId?carName.replace(/ /g,'_')+'_':'')+ new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('Fuel log exported!');
+}
+
+window.exportServiceLog=function(){
+  const wb=XLSX.utils.book_new();
+  const exportSvc=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
+  const svcCarName=svcCarId?cars.find(c=>c.id===svcCarId)?.make+' '+cars.find(c=>c.id===svcCarId)?.model:'All Cars';
+  const data=exportSvc.map(s=>{const c=cars.find(x=>x.id===s.carId);return{Date:s.date,Car:c?`${c.make} ${c.model}`:'',Service:s.type,'Cost (PKR)':s.cost,'Odometer (KM)':s.odometer,'Next Due (KM)':s.nextDueOdo,'Days Since':daysSince(s.date),Notes:s.notes};});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),(svcCarName||'Service').slice(0,30));
+  XLSX.writeFile(wb,'ServiceLog_'+(svcCarId?svcCarName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('Service log exported!');
+}
+
+window.exportFuelPrices=function(){
+  const wb=XLSX.utils.book_new();
+  const data=fuelPrices.map(p=>({Date:p.date,'RON-92 (PKR)':p.ron92,'RON-95 (PKR)':p.ron95,'HSD (PKR)':p.hsd,'CNG (PKR)':p.cng,Source:p.source}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),'Fuel Prices');
+  XLSX.writeFile(wb,'FuelPrices_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  showToast('Fuel prices exported!');
+}
+
+window.exportPL=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(16);doc.text('FleetLedger — P&L Report',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const rows=cars.map(c=>{
+    const fuelCost=fuelLogs.filter(f=>f.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const svcCost=serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const pl=c.status==='sold'?(parseFloat(c.soldAt||0)-parseFloat(c.boughtAt||0)):null;
+    return[`${c.make} ${c.model} ${c.year||''}`,fmtPKR(c.boughtAt||0),fmtPKR(fuelCost),fmtPKR(svcCost),c.status==='sold'?fmtPKR(c.soldAt||0):'—',pl!==null?(pl>=0?'+':'')+fmtPKR(pl):'Owned'];
+  });
+  doc.autoTable({startY:32,head:[['Car','Bought','Fuel Cost','Svc Cost','Sold','P&L']],body:rows,styles:{fontSize:9},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]}});
+  doc.save('PL_Report_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
+// ── SEARCH ────────────────────────────────────────────────────────
+window.handleSearch=function(q){
+  if(!q){renderCarCards('dash-cars',cars.slice(0,6));return;}
+  const ql=q.toLowerCase();
+  const filtered=cars.filter(c=>`${c.make} ${c.model} ${c.reg} ${c.year}`.toLowerCase().includes(ql));
+  renderCarCards('dash-cars',filtered);
+}
+
+// ── MOBILE MENU ──────────────────────────────────────────────────
+window.toggleMobileMenu=function(){
+  const overlay=document.getElementById('mob-menu-overlay');
+  const drawer=document.getElementById('mob-menu-drawer');
+  const isOpen=drawer.style.display==='block';
+  if(isOpen){
+    drawer.style.transform='translateX(-100%)';
+    setTimeout(()=>{drawer.style.display='none';overlay.style.display='none';},250);
+  } else {
+    drawer.style.display='block';overlay.style.display='block';
+    setTimeout(()=>{drawer.style.transform='translateX(0)';},10);
+  }
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────
+window.showPage=function(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item,.mob-nav-item').forEach(n=>n.classList.remove('active'));
+  const el=document.getElementById('page-'+page);
+  if(el){el.classList.add('active');setTimeout(()=>renderCharts(),100);}
+  document.querySelectorAll(`[data-page="${page}"]`).forEach(n=>n.classList.add('active'));
+}
+document.querySelectorAll('.nav-item[data-page],.mob-nav-item[data-page]').forEach(item=>{
+  item.addEventListener('click',()=>showPage(item.dataset.page));
+});
+// Drawer items also update active state
+document.querySelectorAll('#mob-menu-drawer .nav-item[data-page]').forEach(item=>{
+  item.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item,.mob-nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll(`[data-page="${item.dataset.page}"]`).forEach(n=>n.classList.add('active'));
+  });
+});
+
+window.filterCars=function(f,btn){
+  carsFilter=f;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCarList();
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+window.saveFirebaseConfig=function(){
+  const cfg={apiKey:v('cfg-apiKey'),authDomain:v('cfg-authDomain'),projectId:v('cfg-projectId'),storageBucket:v('cfg-storageBucket'),messagingSenderId:v('cfg-messagingSenderId'),appId:v('cfg-appId')};
+  if(!cfg.apiKey){showToast('API Key required','error');return;}
+  localStorage.setItem('fl_firebase_config',JSON.stringify(cfg));
+  showToast('Saved! Reloading…');setTimeout(()=>location.reload(),1200);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const v=id=>document.getElementById(id)?.value?.trim()||'';
+const n=id=>parseFloat(document.getElementById(id)?.value)||0;
+const fmt=n=>(parseFloat(n)||0).toLocaleString('en-PK');
+const fmtPKR=n=>(parseFloat(n)||0).toLocaleString('en-PK');
+const fmtKM=n=>(parseFloat(n)||0).toLocaleString('en-PK');
+
+window.showToast=function(msg,type='success'){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.className='show '+type;
+  t.querySelector('i').className='ti '+(type==='success'?'ti-check':type==='error'?'ti-alert-circle':'ti-info-circle');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── PWA ───────────────────────────────────────────────────────────
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ── BOOT ─────────────────────────────────────────────────────────
+initFirebase();
+</script>
+</body>
+</html>function resetFuelFields(){
   ['f-rate','f-litres','f-cost'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el){
-      el.value='';
-      el.dataset.typed='no';
-      // Also remove any pre-filled value attribute
-      el.removeAttribute('data-typed');
+    if(el) el.value='';
+  });
+  const prev=document.getElementById('kmpl-preview');
+  if(prev) prev.style.display='none';
+}!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FleetLedger — Car Management</title>
+<meta name="description" content="Track fuel, service, finance & P&L for your fleet"/>
+<meta name="theme-color" content="#0f0f1a"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.6.0/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f1a;--bg2:#161625;--bg3:#1e1e32;--bg4:#252540;--bg5:#2d2d50;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.04);
+  --text:#f0f0f8;--text2:#9898b8;--text3:#5a5a78;
+  --gold:#e8c44a;--gold2:#f5d978;--gold-bg:rgba(232,196,74,0.1);
+  --green:#4ade80;--green-bg:rgba(74,222,128,0.1);
+  --red:#f87171;--red-bg:rgba(248,113,113,0.1);
+  --amber:#fbbf24;--amber-bg:rgba(251,191,36,0.1);
+  --blue:#60a5fa;--blue-bg:rgba(96,165,250,0.1);
+  --purple:#a78bfa;--purple-bg:rgba(167,139,250,0.1);
+  --radius:12px;--radius-sm:8px;--radius-xs:6px;
+  --sidebar-w:240px;--topbar-h:56px;
+  --font:'Inter',system-ui,sans-serif;--mono:'Inter',system-ui,sans-serif;
+}
+.light-mode{
+  --bg:#f4f4f8;--bg2:#ffffff;--bg3:#eeeef4;--bg4:#e4e4ee;--bg5:#d8d8e8;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.04);
+  --text:#1a1a2e;--text2:#4a4a6a;--text3:#9898b8;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;overflow:hidden;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+/* ── LAYOUT ── */
+#app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr;height:100vh;}
+
+/* ── TOPBAR ── */
+#topbar{
+  grid-column:1/-1;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:14px;position:sticky;top:0;z-index:100;
+}
+.logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-0.02em;color:var(--text);text-decoration:none;}
+.logo-mark{width:32px;height:32px;border-radius:8px;background:var(--gold);display:flex;align-items:center;justify-content:center;}
+.logo-mark i{color:#0f0f1a;font-size:17px;}
+.top-search{flex:1;max-width:320px;margin-left:16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 12px;}
+.top-search input{background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:13px;width:100%;}
+.top-search input::placeholder{color:var(--text3);}
+.top-search i{color:var(--text3);font-size:15px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.sync-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-family:var(--mono);border:1px solid;}
+.sync-dot{width:6px;height:6px;border-radius:50%;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.icon-btn{width:34px;height:34px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all 0.15s;}
+.icon-btn:hover{background:var(--bg4);color:var(--text);}
+.icon-btn i{font-size:17px;}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0f0f1a;cursor:pointer;}
+
+/* ── SIDEBAR ── */
+#sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:12px 0;display:flex;flex-direction:column;overflow-y:auto;}
+.nav-label{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);padding:10px 16px 4px;font-family:var(--mono);}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-left:2px solid transparent;transition:all 0.15s;position:relative;}
+.nav-item:hover{background:var(--bg3);color:var(--text);}
+.nav-item.active{background:var(--gold-bg);color:var(--gold);border-left-color:var(--gold);}
+.nav-item.active i{color:var(--gold);}
+.nav-item i{font-size:17px;color:var(--text3);flex-shrink:0;}
+.nav-badge{margin-left:auto;font-size:10px;font-weight:700;background:var(--red-bg);color:var(--red);padding:1px 7px;border-radius:10px;font-family:var(--mono);}
+.nav-spacer{flex:1;}
+.nav-version{padding:10px 16px;font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+/* ── MAIN ── */
+#main{overflow-y:auto;background:var(--bg);}
+.page{display:none;padding:24px;flex-direction:column;gap:20px;min-height:100%;}
+.page.active{display:flex;}
+
+/* ── PAGE HEADER ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ph-left h1{font-size:22px;font-weight:700;letter-spacing:-0.02em;}
+.ph-left p{font-size:13px;color:var(--text2);margin-top:3px;}
+.ph-right{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;font-family:var(--font);}
+.btn-primary{background:var(--gold);color:#0f0f1a;}
+.btn-primary:hover{background:var(--gold2);}
+.btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border);}
+.btn-secondary:hover{background:var(--bg4);color:var(--text);}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(248,113,113,0.2);}
+.btn i{font-size:16px;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+
+/* ── METRIC CARDS ── */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow:hidden;cursor:default;}
+.metric::before{content:'';position:absolute;top:0;right:0;width:70px;height:70px;border-radius:50%;background:var(--accent,var(--gold));opacity:0.06;transform:translate(25px,-25px);}
+.m-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);margin-bottom:8px;display:flex;align-items:center;gap:5px;}
+.m-label i{font-size:13px;}
+.m-val{font-size:24px;font-weight:700;letter-spacing:-0.03em;}
+.m-val.gold{color:var(--gold);}
+.m-val.green{color:var(--green);}
+.m-val.red{color:var(--red);}
+.m-val.amber{color:var(--amber);}
+.m-val.blue{color:var(--blue);}
+.m-sub{font-size:12px;color:var(--text3);margin-top:4px;font-family:var(--mono);}
+.m-sub.up{color:var(--green);}
+.m-sub.dn{color:var(--red);}
+.sparkline{height:32px;margin-top:8px;}
+
+/* ── SECTION HEAD ── */
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.section-head h2{font-size:14px;font-weight:600;}
+.section-head a{font-size:12px;color:var(--text3);cursor:pointer;transition:color 0.15s;}
+.section-head a:hover{color:var(--gold);}
+
+/* ── TABLES ── */
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead tr{border-bottom:1px solid var(--border);}
+thead th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);font-family:var(--mono);white-space:nowrap;}
+tbody tr{border-bottom:1px solid var(--border2);transition:background 0.12s;cursor:pointer;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--bg3);}
+tbody td{padding:10px 14px;font-size:13px;color:var(--text2);white-space:nowrap;}
+td.primary{color:var(--text);font-weight:500;}
+td.mono{font-family:var(--mono);}
+td.green{color:var(--green);font-family:var(--mono);}
+td.red{color:var(--red);font-family:var(--mono);}
+td.amber{color:var(--amber);font-family:var(--mono);}
+td.gold{color:var(--gold);font-family:var(--mono);}
+td.blue{color:var(--blue);font-family:var(--mono);}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;font-family:var(--mono);white-space:nowrap;}
+.badge.owned{background:var(--green-bg);color:var(--green);}
+.badge.sold{background:var(--bg4);color:var(--text3);}
+.badge.install{background:var(--amber-bg);color:var(--amber);}
+.badge.overdue{background:var(--red-bg);color:var(--red);}
+.badge.due-soon{background:var(--amber-bg);color:var(--amber);}
+.badge.ok{background:var(--green-bg);color:var(--green);}
+.badge.partial{background:var(--purple-bg);color:var(--purple);}
+.badge.full{background:var(--blue-bg);color:var(--blue);}
+
+/* ── CAR CARDS ── */
+.car-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.car-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:border-color 0.15s,transform 0.15s;}
+.car-card:hover{border-color:rgba(232,196,74,0.4);transform:translateY(-2px);}
+.car-card-top{padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:var(--bg3);}
+.car-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.car-info{flex:1;min-width:0;}
+.car-info h3{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.car-info p{font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--mono);}
+.car-card-stats{padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cs{display:flex;flex-direction:column;gap:2px;}
+.cs-label{font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);font-family:var(--mono);}
+.cs-val{font-size:14px;font-weight:600;}
+.car-card-footer{padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--bg3);}
+.action-chip{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 4px;border-radius:6px;background:var(--bg4);color:var(--text3);font-size:11px;font-weight:500;cursor:pointer;border:none;font-family:var(--font);transition:all 0.15s;}
+.action-chip:hover{background:var(--gold-bg);color:var(--gold);}
+.action-chip i{font-size:13px;}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content;}
+.tab-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text3);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);transition:all 0.15s;white-space:nowrap;}
+.tab-btn.active{background:var(--gold);color:#0f0f1a;font-weight:700;}
+
+/* ── CHART PANELS ── */
+.chart-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.chart-panel canvas{max-height:220px;}
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;}
+
+/* ── SERVICE ITEMS ── */
+.service-list{display:flex;flex-direction:column;gap:8px;}
+.service-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:12px;}
+.svc-icon{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.svc-icon.red{background:var(--red-bg);color:var(--red);}
+.svc-icon.amber{background:var(--amber-bg);color:var(--amber);}
+.svc-icon.green{background:var(--green-bg);color:var(--green);}
+.svc-main{flex:1;min-width:0;}
+.svc-main h4{font-size:13px;font-weight:600;}
+.svc-main p{font-size:12px;color:var(--text3);margin-top:2px;font-family:var(--mono);}
+.svc-right{text-align:right;flex-shrink:0;}
+.svc-right .due{font-size:13px;font-weight:600;font-family:var(--mono);}
+.svc-right .days{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px;}
+
+/* ── INSIGHTS ── */
+.insights-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.insight-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;}
+.insight-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.insight-text h4{font-size:13px;font-weight:600;margin-bottom:3px;}
+.insight-text p{font-size:12px;color:var(--text2);line-height:1.5;}
+
+/* ── MODAL ── */
+#modal-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;}
+#modal-overlay.open{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+.modal-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg2);z-index:1;}
+.modal-head h2{font-size:16px;font-weight:700;}
+.modal-close{width:30px;height:30px;border-radius:6px;background:var(--bg3);border:none;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.modal-close:hover{background:var(--red-bg);color:var(--red);}
+.modal-close i{font-size:16px;}
+.modal-body{padding:20px 22px;}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--bg3);border-radius:0 0 16px 16px;}
+
+/* ── FORMS ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-grid.cols-1{grid-template-columns:1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group.span-2{grid-column:1/-1;}
+label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;font-family:var(--mono);}
+input,select,textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color 0.15s;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);}
+select option{background:var(--bg3);color:var(--text);}
+.input-hint{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px;}
+.form-divider{grid-column:1/-1;height:1px;background:var(--border);margin:4px 0;}
+.form-section{grid-column:1/-1;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);padding-top:4px;}
+.checkbox-row{display:flex;align-items:center;gap:10px;grid-column:1/-1;}
+.checkbox-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--gold);flex-shrink:0;}
+.checkbox-row label{text-transform:none;font-size:13px;color:var(--text);letter-spacing:0;font-family:var(--font);}
+
+/* ── AUTOCOMPLETE ── */
+.ac-wrap{position:relative;}
+.ac-list{position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--bg3);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;display:none;margin-top:2px;}
+.ac-list.open{display:block;}
+.ac-item{padding:8px 12px;font-size:13px;color:var(--text2);cursor:pointer;transition:background 0.1s;}
+.ac-item:hover{background:var(--bg4);color:var(--text);}
+
+/* ── PHOTO UPLOAD ── */
+.photo-upload{border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color 0.15s;}
+.photo-upload:hover{border-color:var(--gold);}
+.photo-upload i{font-size:28px;color:var(--text3);margin-bottom:8px;display:block;}
+.photo-upload p{font-size:12px;color:var(--text3);}
+.photo-preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.photo-thumb{width:64px;height:64px;border-radius:6px;object-fit:cover;border:1px solid var(--border);}
+
+/* ── P&L SUMMARY ── */
+.pl-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.pl-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.pl-card-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-family:var(--mono);margin-bottom:8px;}
+.pl-card-val{font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.02em;}
+
+/* ── FUEL PRICE ── */
+.fp-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
+.fp-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.fp-card-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.fp-card-head i{font-size:20px;color:var(--gold);}
+.fp-card-head span{font-size:13px;font-weight:600;}
+.fp-price{font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.02em;}
+.fp-price span{font-size:14px;font-weight:400;color:var(--text3);}
+.fp-change{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;font-family:var(--mono);padding:2px 8px;border-radius:20px;}
+.fp-change.up{background:var(--red-bg);color:var(--red);}
+.fp-change.dn{background:var(--green-bg);color:var(--green);}
+.fp-change.nc{background:var(--bg4);color:var(--text3);}
+
+/* ── DATE FILTER ── */
+.date-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.date-filter input{width:140px;}
+.date-filter label{text-transform:none;font-size:13px;color:var(--text2);letter-spacing:0;font-family:var(--font);}
+
+/* ── SERVICE TYPES MANAGER ── */
+.svc-types-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.svc-type-chip{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:13px;color:var(--text2);}
+.svc-type-chip button{background:none;border:none;color:var(--text3);cursor:pointer;padding:0;display:flex;align-items:center;font-size:14px;transition:color 0.15s;}
+.svc-type-chip button:hover{color:var(--red);}
+
+/* ── TOKEN ALERT ── */
+.token-alert{display:flex;align-items:center;gap:10px;background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:var(--radius);padding:12px 16px;font-size:13px;color:var(--amber);}
+.token-alert i{font-size:18px;flex-shrink:0;}
+
+/* ── EMPTY STATE ── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;gap:10px;color:var(--text3);text-align:center;}
+.empty-state i{font-size:44px;color:var(--bg4);}
+.empty-state h3{font-size:15px;font-weight:600;color:var(--text2);}
+.empty-state p{font-size:13px;max-width:260px;line-height:1.5;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;transform:translateY(80px);opacity:0;transition:all 0.25s;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-width:320px;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast i{font-size:16px;flex-shrink:0;}
+#toast.success i{color:var(--green);}
+#toast.error i{color:var(--red);}
+#toast.warning i{color:var(--amber);}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;--topbar-h:52px;}
+  #sidebar{display:none;}
+  #app{grid-template-columns:1fr;}
+  /* Metrics - 2 col on mobile */
+  .metrics{grid-template-columns:1fr 1fr;gap:8px;}
+  .metric{padding:12px;}
+  .m-val{font-size:18px;}
+  /* Cards - single col */
+  .car-cards{grid-template-columns:1fr;}
+  .chart-grid{grid-template-columns:1fr;}
+  .pl-cards{grid-template-columns:1fr;}
+  /* Forms */
+  .form-grid{grid-template-columns:1fr;}
+  .form-group.span-2{grid-column:1;}
+  /* Mobile nav */
+  #mobile-nav{display:flex;}
+  .page{padding:12px;padding-bottom:80px;}
+  /* Header */
+  .ph{flex-direction:column;gap:10px;}
+  .ph-left h1{font-size:17px;}
+  .ph-right{display:flex;flex-wrap:wrap;gap:6px;width:100%;}
+  .ph-right .btn{flex:1;min-width:100px;justify-content:center;font-size:12px;padding:7px 10px;}
+  /* Topbar */
+  .top-search{display:none;}
+  .logo-mark{width:28px;height:28px;}
+  #topbar{padding:0 12px;gap:8px;}
+  /* Car filter tabs - horizontal scroll */
+  #dash-car-filter{overflow-x:auto;flex-wrap:nowrap!important;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+  #dash-car-filter::-webkit-scrollbar{display:none;}
+  #svc-car-filter{overflow-x:auto;flex-wrap:nowrap!important;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+  #svc-car-filter::-webkit-scrollbar{display:none;}
+  .tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab-btn{white-space:nowrap;flex-shrink:0;}
+  /* Tables - horizontal scroll */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  /* Charts */
+  .chart-panel canvas{max-height:180px;}
+  /* Section heads */
+  .section-head{flex-wrap:wrap;gap:6px;}
+  /* Service items */
+  .service-item{flex-wrap:wrap;}
+  .svc-right{width:100%;text-align:left;margin-top:4px;}
+  /* P&L */
+  .pl-cards{grid-template-columns:1fr 1fr;}
+  /* Sync pill text */
+  #sync-label{display:none;}
+}
+@media(max-width:380px){
+  .metrics{grid-template-columns:1fr;}
+  .pl-cards{grid-template-columns:1fr;}
+}
+#mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--bg2);border-top:1px solid var(--border);padding:6px 0 max(6px,env(safe-area-inset-bottom));}
+#dash-car-filter{overflow-x:auto;padding-bottom:4px;flex-wrap:nowrap!important;}
+.mob-nav-items{display:flex;justify-content:space-around;}
+.mob-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 10px;cursor:pointer;color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;transition:color 0.15s;}
+.mob-nav-item.active{color:var(--gold);}
+.mob-nav-item i{font-size:20px;}
+</style>
+</head>
+<body>
+
+<script>
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAOf0G2kBuiOpQF6NBq52wCcNl-Z-oW2uA",
+  authDomain: "car-management-78deb.firebaseapp.com",
+  projectId: "car-management-78deb",
+  storageBucket: "car-management-78deb.firebasestorage.app",
+  messagingSenderId: "723180461602",
+  appId: "1:723180461602:web:cb134e95d34564dab4b47b"
+};
+</script>
+
+<div id="app">
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="logo"><div class="logo-mark"><i class="ti ti-car"></i></div>FleetLedger</div>
+    <div class="top-search"><i class="ti ti-search"></i><input type="text" id="search-input" placeholder="Search cars, logs…" oninput="handleSearch(this.value)"/></div>
+    <div class="topbar-right">
+      <div class="sync-pill" id="sync-pill"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Connecting…</span></div>
+      <div class="icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme"><i class="ti ti-sun" id="theme-icon"></i></div>
+      <div class="icon-btn" onclick="showPage('notifications')" title="Alerts"><i class="ti ti-bell"></i><span id="notif-count" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--red)"></span></div>
+      <div class="avatar">AK</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <span class="nav-label">Overview</span>
+    <div class="nav-item active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+    <div class="nav-item" data-page="insights"><i class="ti ti-bulb"></i>Smart Insights</div>
+    <span class="nav-label">Fleet</span>
+    <div class="nav-item" data-page="cars"><i class="ti ti-car"></i>My Cars</div>
+    <div class="nav-item" data-page="fuel-log"><i class="ti ti-droplet"></i>Fuel Log</div>
+    <div class="nav-item" data-page="service"><i class="ti ti-tool"></i>Service Log<span class="nav-badge" id="svc-badge" style="display:none">0</span></div>
+    <span class="nav-label">Finance</span>
+    <div class="nav-item" data-page="pl"><i class="ti ti-chart-bar"></i>P&amp;L &amp; Costs</div>
+    <div class="nav-item" data-page="installments"><i class="ti ti-credit-card"></i>Installments</div>
+    <span class="nav-label">Market</span>
+    <div class="nav-item" data-page="fuel-prices"><i class="ti ti-gas-station"></i>Fuel Prices</div>
+    <span class="nav-label">Settings</span>
+    <div class="nav-item" data-page="svc-types"><i class="ti ti-list"></i>Service Types</div>
+    <div class="nav-item" data-page="reminders"><i class="ti ti-bell-ringing"></i>Reminders<span class="nav-badge" id="rem-badge" style="display:none">0</span></div>
+    <div class="nav-item" data-page="settings"><i class="ti ti-settings"></i>Settings</div>
+    <div class="nav-spacer"></div>
+    <div class="nav-version">FleetLedger v2.0</div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="ph">
+        <div class="ph-left"><h1>Dashboard</h1><p id="dash-sub">Loading…</p></div>
+        <div class="ph-right">
+          <button class="btn btn-secondary" onclick="showModal('fuel')"><i class="ti ti-droplet"></i>Log Fuel</button>
+          <button class="btn btn-secondary" onclick="showModal('service')"><i class="ti ti-tool"></i>Log Service</button>
+          <button class="btn btn-secondary" onclick="exportDashboardPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+          <button class="btn btn-primary" onclick="showModal('car')"><i class="ti ti-plus"></i>Add Car</button>
+        </div>
+      </div>
+      <!-- Car Filter Tabs -->
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" id="dash-car-filter">
+        <button class="tab-btn active" onclick="setDashCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>
+      </div>
+      <div id="token-alerts-dash"></div>
+      <div class="metrics" id="dash-metrics">
+        <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-car"></i>Total Cars</div><div class="m-val blue" id="dm-cars">—</div><div class="m-sub" id="dm-cars-sub">loading</div></div>
+        <div class="metric" style="--accent:var(--gold)"><div class="m-label"><i class="ti ti-droplet"></i>Fleet Avg</div><div class="m-val gold" id="dm-avg">—</div><div class="m-sub">KM/L (full fills)</div></div>
+        <div class="metric" style="--accent:var(--green)"><div class="m-label"><i class="ti ti-trending-up"></i>Total P&L</div><div class="m-val" id="dm-pl">—</div><div class="m-sub" id="dm-pl-sub">sold cars</div></div>
+        <div class="metric" style="--accent:var(--red)"><div class="m-label"><i class="ti ti-alert-triangle"></i>Service Alerts</div><div class="m-val red" id="dm-alerts">—</div><div class="m-sub">need attention</div></div>
+        <div class="metric" style="--accent:var(--amber)"><div class="m-label"><i class="ti ti-gas-station"></i>RON-92 Price</div><div class="m-val amber" id="dm-petrol">—</div><div class="m-sub" id="dm-petrol-sub">per litre PKR</div></div>
+        <div class="metric" style="--accent:var(--purple)"><div class="m-label"><i class="ti ti-calendar-month"></i>Monthly Cost</div><div class="m-val" id="dm-monthly" style="color:var(--purple)">—</div><div class="m-sub" id="dm-monthly-sub">fuel + service PKR</div></div>
+        <div class="metric" style="--accent:var(--red)"><div class="m-label"><i class="ti ti-sun"></i>Daily Cost</div><div class="m-val" id="dm-daily" style="color:var(--red)">—</div><div class="m-sub" id="dm-daily-sub">PKR per day</div></div>
+        <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-road"></i>Avg KM/Day</div><div class="m-val blue" id="dm-kmday">—</div><div class="m-sub" id="dm-kmday-sub">based on odometer</div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-panel"><div class="section-head"><h2>Fuel Economy Trend</h2></div><canvas id="chart-economy"></canvas></div>
+        <div class="chart-panel"><div class="section-head"><h2>Monthly Fuel Spend (PKR)</h2></div><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head">
+          <h2>Month-on-Month Comparison</h2>
+          <div style="display:flex;gap:6px">
+            <button class="tab-btn active" id="mom-cost-btn" onclick="setMOMChart('cost',this)" style="font-size:11px;padding:4px 10px">Running Cost</button>
+            <button class="tab-btn" id="mom-fuel-btn" onclick="setMOMChart('fuel',this)" style="font-size:11px;padding:4px 10px">Petrol (Litres)</button>
+            <button class="tab-btn" id="mom-both-btn" onclick="setMOMChart('both',this)" style="font-size:11px;padding:4px 10px">Both</button>
+          </div>
+        </div>
+        <canvas id="chart-mom" style="max-height:220px;margin-top:12px"></canvas>
+      </div>
+      <div><div class="section-head"><h2>My Fleet</h2><a onclick="showPage('cars')">View all →</a></div><div class="car-cards" id="dash-cars" style="margin-top:12px"></div></div>
+      <div>
+        <div class="section-head"><h2>Service Alerts</h2><a onclick="showPage('reminders')">View all →</a></div>
+        <div class="service-list" id="dash-services" style="margin-top:10px"></div>
+      </div>
+      <div>
+        <div class="section-head"><h2>Service Progress</h2><a onclick="showPage('reminders')">Full view →</a></div>
+        <div id="dash-svc-progress" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head"><h2>Service Timeline</h2></div>
+        <canvas id="chart-svc-timeline" style="max-height:200px;margin-top:10px"></canvas>
+      </div>
+    </div>
+
+    <!-- ── MY CARS ── -->
+    <div class="page" id="page-cars">
+      <div class="ph">
+        <div class="ph-left"><h1>My Cars</h1><p id="cars-sub">—</p></div>
+        <div class="ph-right"><button class="btn btn-primary" onclick="showModal('car')"><i class="ti ti-plus"></i>Add Car</button></div>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="filterCars('all',this)">All</button>
+        <button class="tab-btn" onclick="filterCars('owned',this)">Owned</button>
+        <button class="tab-btn" onclick="filterCars('sold',this)">Sold</button>
+        <button class="tab-btn" onclick="filterCars('installment',this)">Installment</button>
+      </div>
+      <div id="token-alerts-cars"></div>
+      <div class="car-cards" id="cars-list"></div>
+    </div>
+
+    <!-- ── FUEL LOG ── -->
+    <div class="page" id="page-fuel-log">
+      <div class="ph">
+        <div class="ph-left"><h1>Fuel Log</h1><p>Fill-up history &amp; KM/L tracking</p></div>
+        <div class="ph-right">
+          <button class="btn btn-secondary" onclick="exportFuelLog()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+          <button class="btn btn-secondary" onclick="exportFuelLogPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+          <button class="btn btn-primary" onclick="showModal('fuel')"><i class="ti ti-plus"></i>Log Fill-up</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="fuel-car-filter"></div>
+      <!-- Month Summary Card -->
+      <div id="fuel-month-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"></div>
+      <div class="chart-grid">
+        <div class="chart-panel"><div class="section-head"><h2>KM/L Trend (Full Fills)</h2></div><canvas id="chart-fuel-trend"></canvas></div>
+        <div class="chart-panel"><div class="section-head"><h2>Fuel Cost per Month (PKR)</h2></div><canvas id="chart-fuel-cost"></canvas></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Car</th><th>Station</th><th>Type</th><th>Litres</th><th>PKR/L</th><th>Total (PKR)</th><th>Odometer</th><th>Distance</th><th>Days Since</th><th>KM/L</th><th>Fill</th><th>Actions</th></tr></thead>
+          <tbody id="fuel-tbody"></tbody>
+        </table>
+        <div style="padding:10px 14px;font-size:11px;color:var(--text3);border-top:1px solid var(--border)">
+          * Distance and KM/L marked with * are auto-calculated from odometer readings (not manually entered). To make permanent, edit the record and save.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SERVICE LOG ── -->
+    <div class="page" id="page-service">
+      <div class="ph">
+        <div class="ph-left"><h1>Service Log</h1><p>Maintenance records &amp; due dates</p></div>
+        <div class="ph-right">
+          <button class="btn btn-secondary" onclick="exportServiceLog()"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+          <button class="btn btn-secondary" onclick="exportServiceLogPDF()"><i class="ti ti-file-type-pdf"></i>PDF</button>
+          <button class="btn btn-primary" onclick="showModal('service')"><i class="ti ti-plus"></i>Log Service</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="svc-car-filter"></div>
+      <div class="section-head"><h2>Alerts &amp; Upcoming</h2></div>
+      <div class="service-list" id="svc-alerts-list" style="margin-top:8px"></div>
+      <div class="section-head" style="margin-top:4px"><h2>Full Service History</h2></div>
+      <div class="table-wrap" style="margin-top:8px">
+        <table>
+          <thead><tr><th>Date</th><th>Car</th><th>Service</th><th>Cost (PKR)</th><th>ODO at Service</th><th>Current ODO</th><th>Next Due (KM)</th><th>KM Left</th><th>Days Since</th><th>Status</th><th>Receipt</th><th>Actions</th></tr></thead>
+          <tbody id="svc-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── P&L & COSTS ── -->
+    <div class="page" id="page-pl">
+      <div class="ph">
+        <div class="ph-left"><h1>P&amp;L &amp; Running Costs</h1><p>Full cost of ownership per car</p></div>
+        <div class="ph-right"><button class="btn btn-secondary" onclick="exportPL()"><i class="ti ti-download"></i>Export</button></div>
+      </div>
+      <div class="pl-cards" id="pl-summary-cards">
+        <div class="pl-card"><div class="pl-card-label">Total Invested (PKR)</div><div class="pl-card-val" id="pl-invested">0</div></div>
+        <div class="pl-card"><div class="pl-card-label">Total Sold For (PKR)</div><div class="pl-card-val" id="pl-sold" style="color:var(--blue)">0</div></div>
+        <div class="pl-card"><div class="pl-card-label">Net Profit / Loss</div><div class="pl-card-val" id="pl-net">0</div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-panel"><div class="section-head"><h2>Buy vs Sell Price (PKR)</h2></div><canvas id="chart-pl"></canvas></div>
+        <div class="chart-panel"><div class="section-head"><h2>Service Cost per Car (PKR)</h2></div><canvas id="chart-svc-cost"></canvas></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Car</th><th>Bought (PKR)</th><th>Fuel Total</th><th>Service Total</th><th>Cost/KM</th><th>Sold (PKR)</th><th>P&L (PKR)</th><th>Return %</th></tr></thead>
+          <tbody id="pl-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── INSTALLMENTS ── -->
+    <div class="page" id="page-installments">
+      <div class="ph"><div class="ph-left"><h1>Installments</h1><p>Active loan tracker</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Car</th><th>Loan (PKR)</th><th>EMI/mo</th><th>Paid So Far</th><th>Remaining</th><th>Months Left</th><th>EMI Date</th></tr></thead>
+          <tbody id="install-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── FUEL PRICES ── -->
+    <div class="page" id="page-fuel-prices">
+      <div class="ph">
+        <div class="ph-left"><h1>Fuel Prices</h1><p id="fp-date">Pakistan market rates</p></div>
+        <div class="ph-right">
+          <button class="btn btn-secondary" onclick="exportFuelPrices()"><i class="ti ti-download"></i>Export</button>
+          <button class="btn btn-primary" onclick="showModal('fuel-price')"><i class="ti ti-plus"></i>Update Prices</button>
+        </div>
+      </div>
+      <div class="fp-cards" id="fp-cards"></div>
+      <div class="chart-panel">
+        <div class="section-head">
+          <h2>Price History</h2>
+          <div class="date-filter">
+            <label>From</label><input type="date" id="fp-from" onchange="renderFuelPriceChart()"/>
+            <label>To</label><input type="date" id="fp-to" onchange="renderFuelPriceChart()"/>
+          </div>
+        </div>
+        <canvas id="chart-fp" style="margin-top:12px;max-height:240px"></canvas>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>RON-92 (PKR)</th><th>RON-95 (PKR)</th><th>HSD (PKR)</th><th>CNG (PKR)</th><th>Source</th></tr></thead>
+          <tbody id="fp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── SMART INSIGHTS ── -->
+    <div class="page" id="page-insights">
+      <div class="ph"><div class="ph-left"><h1>Smart Insights</h1><p>Analytics &amp; fleet performance</p></div></div>
+      <!-- Month Summary -->
+      <div class="section-head"><h2>This Month at a Glance</h2></div>
+      <div class="metrics" id="insights-month-summary" style="margin-top:8px"></div>
+      <!-- Charts -->
+      <div class="chart-grid">
+        <div class="chart-panel">
+          <div class="section-head"><h2>Cost per KM Trend (PKR/KM)</h2></div>
+          <canvas id="chart-cost-per-km" style="max-height:200px;margin-top:10px"></canvas>
+        </div>
+        <div class="chart-panel">
+          <div class="section-head"><h2>Days Between Fill-ups</h2></div>
+          <canvas id="chart-fill-freq" style="max-height:200px;margin-top:10px"></canvas>
+        </div>
+      </div>
+      <div class="chart-panel">
+        <div class="section-head"><h2>Fuel Station Comparison (Avg KM/L)</h2></div>
+        <canvas id="chart-station" style="max-height:200px;margin-top:10px"></canvas>
+      </div>
+      <!-- KM/L Gauges -->
+      <div class="section-head"><h2>KM/L Efficiency Gauges</h2></div>
+      <div id="insights-gauges" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:8px"></div>
+      <!-- Text Insights -->
+      <div class="section-head"><h2>Smart Alerts</h2></div>
+      <div class="insights-grid" id="insights-grid" style="margin-top:8px"><div class="empty-state"><i class="ti ti-bulb"></i><h3>Add some data first</h3><p>Insights appear once you have cars, fuel logs and service records.</p></div></div>
+    </div>
+
+    <!-- ── SERVICE TYPES ── -->
+    <div class="page" id="page-svc-types">
+      <div class="ph"><div class="ph-left"><h1>Service Types</h1><p>Manage your service categories</p></div></div>
+      <div class="table-wrap" style="padding:20px">
+        <h2 style="font-size:14px;margin-bottom:6px">Your Service Types</h2>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Click the ✕ on any service to remove it. Add your own below.</p>
+        <div class="svc-types-list" id="svc-types-list"></div>
+        <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+          <input id="new-svc-type" placeholder="Type new service name and press Enter or click Add…" style="flex:1" onkeypress="if(event.key==='Enter')addSvcType()"/>
+          <button class="btn btn-primary" onclick="addSvcType()"><i class="ti ti-plus"></i>Add</button>
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <button class="btn btn-secondary btn-sm" onclick="resetSvcTypes()"><i class="ti ti-refresh"></i>Reset to Defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REMINDERS ── -->
+    <div class="page" id="page-reminders">
+      <div class="ph">
+        <div class="ph-left"><h1>Reminders</h1><p>Upcoming &amp; overdue services</p></div>
+        <div class="ph-right"><button class="btn btn-secondary" onclick="exportReminders()"><i class="ti ti-download"></i>Export PDF</button></div>
+      </div>
+      <div id="rem-overdue-section">
+        <div class="section-head"><h2 style="color:var(--red)">🔴 Overdue</h2></div>
+        <div class="service-list" id="rem-overdue" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px" id="rem-upcoming-section">
+        <div class="section-head"><h2 style="color:var(--amber)">⚠️ Due Soon</h2></div>
+        <div class="service-list" id="rem-due-soon" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="section-head"><h2 style="color:var(--green)">✅ OK</h2></div>
+        <div class="service-list" id="rem-ok" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="section-head"><h2>📊 Service Progress</h2></div>
+        <div id="rem-progress" style="margin-top:10px;display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
+
+    <!-- ── NOTIFICATIONS ── -->
+    <div class="page" id="page-notifications">
+      <div class="ph"><div class="ph-left"><h1>Alerts &amp; Reminders</h1><p>Service due, token expiry &amp; more</p></div></div>
+      <div class="service-list" id="notif-list"><div class="empty-state"><i class="ti ti-bell-off"></i><h3>No alerts</h3><p>Everything looks good!</p></div></div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="page" id="page-settings">
+      <div class="ph"><div class="ph-left"><h1>Settings</h1><p>Firebase config &amp; preferences</p></div></div>
+      <div class="table-wrap" style="padding:22px">
+        <h2 style="font-size:15px;margin-bottom:6px">🔥 Firebase Configuration</h2>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">Your config is already saved. Update below if needed.</p>
+        <div class="form-grid cols-1">
+          <div class="form-group"><label>API Key</label><input id="cfg-apiKey"/></div>
+          <div class="form-group"><label>Auth Domain</label><input id="cfg-authDomain"/></div>
+          <div class="form-group"><label>Project ID</label><input id="cfg-projectId"/></div>
+          <div class="form-group"><label>Storage Bucket</label><input id="cfg-storageBucket"/></div>
+          <div class="form-group"><label>Messaging Sender ID</label><input id="cfg-messagingSenderId"/></div>
+          <div class="form-group"><label>App ID</label><input id="cfg-appId"/></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" onclick="saveFirebaseConfig()"><i class="ti ti-device-floppy"></i>Save &amp; Reconnect</button>
+          <button class="btn btn-secondary" onclick="exportAll()"><i class="ti ti-download"></i>Export All Data</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MOBILE NAV -->
+<div id="mobile-nav">
+  <div class="mob-nav-items">
+    <div class="mob-nav-item active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i>Home</div>
+    <div class="mob-nav-item" data-page="cars"><i class="ti ti-car"></i>Cars</div>
+    <div class="mob-nav-item" data-page="fuel-log"><i class="ti ti-droplet"></i>Fuel</div>
+    <div class="mob-nav-item" data-page="service"><i class="ti ti-tool"></i>Service</div>
+    <div class="mob-nav-item" data-page="reminders"><i class="ti ti-bell-ringing"></i>Alerts</div>
+    <div class="mob-nav-item" onclick="toggleMobileMenu()"><i class="ti ti-menu-2"></i>More</div>
+  </div>
+</div>
+
+<!-- MOBILE SLIDE MENU -->
+<div id="mob-menu-overlay" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6)" onclick="toggleMobileMenu()"></div>
+<div id="mob-menu-drawer" style="display:none;position:fixed;left:0;top:0;bottom:0;width:260px;z-index:900;background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;transform:translateX(-100%);transition:transform 0.25s">
+  <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+    <div class="logo-mark"><i class="ti ti-car" style="color:#0f0f1a;font-size:15px"></i></div>
+    <span style="font-weight:700;font-size:15px">FleetLedger</span>
+    <button onclick="toggleMobileMenu()" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer"><i class="ti ti-x"></i></button>
+  </div>
+  <div style="padding:8px 0">
+    <div style="font-size:10px;color:var(--text3);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.1em">Overview</div>
+    <div class="nav-item" data-page="dashboard" onclick="toggleMobileMenu()"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+    <div class="nav-item" data-page="insights" onclick="toggleMobileMenu()"><i class="ti ti-bulb"></i>Smart Insights</div>
+    <div style="font-size:10px;color:var(--text3);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.1em">Fleet</div>
+    <div class="nav-item" data-page="cars" onclick="toggleMobileMenu()"><i class="ti ti-car"></i>My Cars</div>
+    <div class="nav-item" data-page="fuel-log" onclick="toggleMobileMenu()"><i class="ti ti-droplet"></i>Fuel Log</div>
+    <div class="nav-item" data-page="service" onclick="toggleMobileMenu()"><i class="ti ti-tool"></i>Service Log</div>
+    <div style="font-size:10px;color:var(--text3);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.1em">Finance</div>
+    <div class="nav-item" data-page="pl" onclick="toggleMobileMenu()"><i class="ti ti-chart-bar"></i>P&amp;L &amp; Costs</div>
+    <div class="nav-item" data-page="installments" onclick="toggleMobileMenu()"><i class="ti ti-credit-card"></i>Installments</div>
+    <div style="font-size:10px;color:var(--text3);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.1em">Market</div>
+    <div class="nav-item" data-page="fuel-prices" onclick="toggleMobileMenu()"><i class="ti ti-gas-station"></i>Fuel Prices</div>
+    <div style="font-size:10px;color:var(--text3);padding:10px 16px 4px;text-transform:uppercase;letter-spacing:0.1em">Settings</div>
+    <div class="nav-item" data-page="reminders" onclick="toggleMobileMenu()"><i class="ti ti-bell-ringing"></i>Reminders</div>
+    <div class="nav-item" data-page="svc-types" onclick="toggleMobileMenu()"><i class="ti ti-list"></i>Service Types</div>
+    <div class="nav-item" data-page="settings" onclick="toggleMobileMenu()"><i class="ti ti-settings"></i>Settings</div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay">
+  <div class="modal" id="active-modal"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"><i class="ti ti-check"></i><span id="toast-msg"></span></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+// ── STATE ─────────────────────────────────────────────────────────
+let db=null, storage=null;
+let cars=[], fuelLogs=[], serviceLogs=[], fuelPrices=[];
+let carsFilter='all';
+let dashCarId=null;
+let svcCarId=null;
+let fuelCarId=null;
+let chartInstances={};
+let DEFAULT_SVC_TYPES=['Oil Change','Oil Filter Change','Air Filter Change','Fuel Filter Change','Spark Plugs Change','Transmission Oil Change','Coolant / Radiator Flush','Engine Tune-up','Tyre Puncture Repair','Tyre Rotation','Tyre Balancing','Wheel Alignment','Tyre Replacement','Brake Pads Change','Brake Disc Change','Brake Oil Change','AC Filter Change','AC Gas Refill','AC Service / Cleaning','Battery Change','Battery Terminals Cleaning','Car Wash / Detailing','Windshield Wiper Change','Headlight / Bulb Change','Suspension Check','Steering Oil Change','General Inspection'];
+let svcTypes = JSON.parse(localStorage.getItem('fl_svc_types')||JSON.stringify(DEFAULT_SVC_TYPES));
+let theme = localStorage.getItem('fl_theme')||'dark';
+
+// ── THEME ─────────────────────────────────────────────────────────
+function applyTheme(){
+  if(theme==='light') document.body.classList.add('light-mode');
+  else document.body.classList.remove('light-mode');
+  document.getElementById('theme-icon').className = theme==='light'?'ti ti-moon':'ti ti-sun';
+}
+window.toggleTheme=function(){
+  theme = theme==='dark'?'light':'dark';
+  localStorage.setItem('fl_theme',theme);
+  applyTheme();
+  // Redraw charts
+  Object.values(chartInstances).forEach(c=>{try{c.destroy();}catch(e){}});
+  chartInstances={};
+  renderCharts();
+}
+applyTheme();
+
+// ── FIREBASE ──────────────────────────────────────────────────────
+function initFirebase(){
+  const saved=localStorage.getItem('fl_firebase_config');
+  const cfg=saved?JSON.parse(saved):window.FIREBASE_CONFIG;
+  if(!cfg.apiKey){setSyncStatus(false);loadLocal();return;}
+  try{
+    const app=initializeApp(cfg);
+    db=getFirestore(app);
+    storage=getStorage(app);
+    setSyncStatus(true);
+    attachListeners();
+  }catch(e){
+    console.error(e);setSyncStatus(false);loadLocal();
+    showToast('Firebase error — running offline','error');
+  }
+}
+
+function setSyncStatus(on){
+  const pill=document.getElementById('sync-pill');
+  const dot=document.getElementById('sync-dot');
+  const label=document.getElementById('sync-label');
+  if(on){
+    pill.style.cssText='background:var(--green-bg);border-color:rgba(74,222,128,0.25);color:var(--green)';
+    dot.style.background='var(--green)';label.textContent='Live sync';
+  }else{
+    pill.style.cssText='background:var(--amber-bg);border-color:rgba(251,191,36,0.25);color:var(--amber)';
+    dot.style.background='var(--amber)';label.textContent='Offline';
+  }
+}
+
+function attachListeners(){
+  onSnapshot(query(collection(db,'cars'),orderBy('createdAt','desc')),snap=>{
+    cars=snap.docs.map(d=>({id:d.id,...d.data()}));renderAll();
+  });
+  onSnapshot(query(collection(db,'fuelLogs'),orderBy('date','desc')),snap=>{
+    fuelLogs=snap.docs.map(d=>({id:d.id,...d.data()}));renderFuelLog();renderCharts();renderInsights();
+  });
+  onSnapshot(query(collection(db,'serviceLogs'),orderBy('date','desc')),snap=>{
+    serviceLogs=snap.docs.map(d=>({id:d.id,...d.data()}));renderServiceLog();renderInsights();
+  });
+  onSnapshot(query(collection(db,'fuelPrices'),orderBy('date','desc')),snap=>{
+    fuelPrices=snap.docs.map(d=>({id:d.id,...d.data()}));renderFuelPrices();renderFuelPriceChart();
+  });
+}
+
+function loadLocal(){
+  cars=JSON.parse(localStorage.getItem('fl_cars')||'[]');
+  fuelLogs=JSON.parse(localStorage.getItem('fl_fuel')||'[]');
+  serviceLogs=JSON.parse(localStorage.getItem('fl_service')||'[]');
+  fuelPrices=JSON.parse(localStorage.getItem('fl_prices')||'[]');
+  renderAll();
+}
+function saveLocal(){
+  localStorage.setItem('fl_cars',JSON.stringify(cars));
+  localStorage.setItem('fl_fuel',JSON.stringify(fuelLogs));
+  localStorage.setItem('fl_service',JSON.stringify(serviceLogs));
+  localStorage.setItem('fl_prices',JSON.stringify(fuelPrices));
+}
+
+// ── CRUD ──────────────────────────────────────────────────────────
+async function addRec(col,data){
+  if(db){await addDoc(collection(db,col),{...data,createdAt:serverTimestamp()});}
+  else{
+    const item={...data,id:Date.now().toString(),createdAt:new Date().toISOString()};
+    if(col==='cars')cars.unshift(item);
+    else if(col==='fuelLogs')fuelLogs.unshift(item);
+    else if(col==='serviceLogs')serviceLogs.unshift(item);
+    else if(col==='fuelPrices')fuelPrices.unshift(item);
+    saveLocal();renderAll();
+  }
+}
+async function updateRec(col,id,data){
+  if(db){await updateDoc(doc(db,col,id),data);}
+  else{
+    const arr=col==='cars'?cars:col==='fuelLogs'?fuelLogs:col==='serviceLogs'?serviceLogs:fuelPrices;
+    const i=arr.findIndex(x=>x.id===id);if(i>=0)Object.assign(arr[i],data);
+    saveLocal();renderAll();
+  }
+}
+async function deleteRec(col,id){
+  if(db){await deleteDoc(doc(db,col,id));}
+  else{
+    if(col==='cars')cars=cars.filter(x=>x.id!==id);
+    else if(col==='fuelLogs')fuelLogs=fuelLogs.filter(x=>x.id!==id);
+    else if(col==='serviceLogs')serviceLogs=serviceLogs.filter(x=>x.id!==id);
+    saveLocal();renderAll();
+  }
+}
+
+// ── PHOTO UPLOAD ──────────────────────────────────────────────────
+async function uploadPhoto(file,path){
+  if(!storage)return null;
+  // Compress
+  const canvas=document.createElement('canvas');
+  const img=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=URL.createObjectURL(file);});
+  const MAX=800;let w=img.width,h=img.height;
+  if(w>MAX){h=h*(MAX/w);w=MAX;}
+  canvas.width=w;canvas.height=h;
+  canvas.getContext('2d').drawImage(img,0,0,w,h);
+  const blob=await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.7));
+  const storageRef=ref(storage,path);
+  await uploadBytes(storageRef,blob);
+  return await getDownloadURL(storageRef);
+}
+
+// ── RENDER ALL ────────────────────────────────────────────────────
+function renderAll(){
+  renderDashboard();renderCarList();renderFuelLog();renderServiceLog();
+  renderPL();renderInstallments();renderFuelPrices();renderInsights();
+  renderServiceTypes();renderNotifications();renderReminders();renderCharts();checkTokenAlerts();
+  buildFuelCarFilter();
+}
+
+// ── COST CALCULATION ENGINE ──────────────────────────────────────
+
+// Calculate average KM per day for a car (or filtered set)
+function calcKMperDay(carList, fuelList){
+  let best=0;
+  carList.forEach(c=>{
+    const purchaseDate=c.purchaseDate;
+    // Fix: odoAtPurchase can be 0 (brand new) — check for null/undefined not falsy
+    const odoAtPurchase=c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):null;
+    const currentOdo=getTrueOdo(c.id);
+    if(!purchaseDate||odoAtPurchase===null||currentOdo<=odoAtPurchase)return;
+    const days=(Date.now()-new Date(purchaseDate).getTime())/(1000*60*60*24);
+    if(days<1)return;
+    const kmDay=(currentOdo-odoAtPurchase)/days;
+    best+=kmDay;
+  });
+  if(best>0)return best;
+  // Fallback: use fuel log odometer span
+  const sorted=[...fuelList].filter(f=>f.odometer&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(sorted.length>=2){
+    const first=sorted[0];const last=sorted[sorted.length-1];
+    const days=(new Date(last.date)-new Date(first.date))/(1000*60*60*24);
+    if(days>0)return (parseFloat(last.odometer)-parseFloat(first.odometer))/days;
+  }
+  return 0;
+}
+
+// Calculate daily service cost for a set of service logs
+function calcDailySvcCost(svcList, carList, fuelList){
+  const kmDay=calcKMperDay(carList, fuelList);
+  if(!kmDay)return 0;
+  // Get latest service per car+type
+  const latest={};
+  [...svcList].reverse().forEach(s=>{
+    const k=s.carId+'__'+s.type;
+    if(!latest[k])latest[k]=s;
+  });
+  let dailyCost=0;
+  Object.values(latest).forEach(s=>{
+    if(!s.nextDueOdo||!s.cost)return;
+    const car=carList.find(c=>c.id===s.carId);
+    if(!car)return;
+    const curOdo=parseFloat(car.odometer||0);
+    const nextDue=parseFloat(s.nextDueOdo);
+    const kmLeft=nextDue-curOdo;
+    if(kmLeft<=0)return; // overdue, skip
+    const daysLeft=kmLeft/kmDay;
+    if(daysLeft>0) dailyCost+=parseFloat(s.cost)/daysLeft;
+  });
+  return dailyCost;
+}
+
+// Calculate monthly service cost contribution (daily × days in month)
+function calcMonthlySvcCost(svcList, carList, fuelList){
+  const dailyCost=calcDailySvcCost(svcList, carList, fuelList);
+  const now=new Date();
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  return dailyCost*daysInMonth;
+}
+
+// Get month keys for last N months
+function lastNMonths(n){
+  const months=[];
+  const now=new Date();
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  return months;
+}
+
+let momChartType='cost';
+window.setMOMChart=function(type,btn){
+  momChartType=type;
+  document.querySelectorAll('[id^="mom-"]').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderMOMChart();
+}
+
+function renderMOMChart(){
+  const d=chartDefaults();
+  const months=lastNMonths(6);
+  const labels=months.map(m=>{const[y,mo]=m.split('-');return mo+'/'+y.slice(2);});
+
+  const filteredFuelAll=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const filteredSvcAll=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
+  const filteredCarsAll=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
+
+  // Monthly fuel cost split by fuel type
+  const ron92Costs=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-92').reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  const ron95Costs=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-95').reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  const ron92Litres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-92').reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
+  const ron95Litres=months.map(m=>filteredFuelAll.filter(f=>f.date&&f.date.startsWith(m)&&f.fuelType==='RON-95').reduce((a,b)=>a+(parseFloat(b.litres)||0),0));
+  const allFuelCosts=months.map((m,i)=>ron92Costs[i]+ron95Costs[i]);
+  const svcCosts=months.map(m=>filteredSvcAll.filter(s=>s.date&&s.date.startsWith(m)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0));
+  const totalCosts=months.map((m,i)=>allFuelCosts[i]+svcCosts[i]);
+
+  let datasets=[];
+  if(momChartType==='cost'||momChartType==='both'){
+    datasets.push({label:'RON-92 Cost (PKR)',data:ron92Costs,backgroundColor:'rgba(232,196,74,0.75)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:'y'});
+    datasets.push({label:'RON-95 Cost (PKR)',data:ron95Costs,backgroundColor:'rgba(96,165,250,0.75)',borderColor:'rgba(96,165,250,1)',borderRadius:4,yAxisID:'y'});
+    datasets.push({label:'Service Cost (PKR)',data:svcCosts,backgroundColor:'rgba(167,139,250,0.6)',borderColor:'rgba(167,139,250,1)',borderRadius:4,yAxisID:'y'});
+  }
+  if(momChartType==='fuel'||momChartType==='both'){
+    datasets.push({label:'RON-92 (Litres)',data:ron92Litres,backgroundColor:'rgba(232,196,74,0.75)',borderColor:'rgba(232,196,74,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
+    datasets.push({label:'RON-95 (Litres)',data:ron95Litres,backgroundColor:'rgba(96,165,250,0.75)',borderColor:'rgba(96,165,250,1)',borderRadius:4,yAxisID:momChartType==='both'?'y1':'y'});
+  }
+
+  const scales={x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor},title:{display:true,text:'PKR',color:d.textColor,font:{size:10}}}};
+  if(momChartType==='both'){
+    scales.y1={type:'linear',display:true,position:'right',ticks:{color:'rgba(232,196,74,0.8)',font:{size:10}},grid:{drawOnChartArea:false},title:{display:true,text:'Litres',color:'rgba(232,196,74,0.8)',font:{size:10}}};
+  }
+
+  mkChart('chart-mom',{type:'bar',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales}});
+}
+
+// ── DASHBOARD CAR FILTER ─────────────────────────────────────────
+window.setDashCar=function(carId, btn){
+  dashCarId=carId;
+  document.querySelectorAll('#dash-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderDashboard();
+  renderMOMChart();
+}
+
+function buildDashCarFilter(){
+  const wrap=document.getElementById('dash-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(dashCarId===null?'active':'')+'" onclick="setDashCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(dashCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setDashCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+function renderDashboard(){
+  buildDashCarFilter();
+  // Filter data based on selected car
+  const filteredCars=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
+  const filteredFuel=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const filteredSvc=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
+  const selectedCar=dashCarId?cars.find(c=>c.id===dashCarId):null;
+
+  const owned=filteredCars.filter(c=>c.status==='owned').length;
+  const sold=filteredCars.filter(c=>c.status==='sold').length;
+  document.getElementById('dm-cars').textContent=filteredCars.length;
+  document.getElementById('dm-cars-sub').textContent=`${owned} owned · ${sold} sold`;
+  document.getElementById('dash-sub').textContent=selectedCar?`${selectedCar.make} ${selectedCar.model} ${selectedCar.year||''}`:`${cars.length} vehicle${cars.length!==1?'s':''} tracked`;
+
+  const fullFills=filteredFuel.filter(f=>f.fillType==='full'&&f.kmpl>0);
+  const avg=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):'—';
+  document.getElementById('dm-avg').textContent=avg==='—'?'—':avg;
+
+  let totalPL=0;
+  filteredCars.filter(c=>c.status==='sold'&&c.soldAt&&c.boughtAt).forEach(c=>{
+    totalPL+=(parseFloat(c.soldAt)||0)-(parseFloat(c.boughtAt)||0);
+  });
+  const plEl=document.getElementById('dm-pl');
+  plEl.textContent=totalPL===0?'PKR 0':(totalPL>0?'+':'')+fmtPKR(totalPL);
+  plEl.className='m-val '+(totalPL>0?'green':totalPL<0?'red':'');
+
+  const alerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').length;
+  document.getElementById('dm-alerts').textContent=alerts;
+  const badge=document.getElementById('svc-badge');
+  badge.style.display=alerts>0?'inline':'none';
+  if(alerts>0)badge.textContent=alerts;
+
+  if(fuelPrices.length){
+    const l=fuelPrices[0];
+    document.getElementById('dm-petrol').textContent=l.ron92?fmtPKR(l.ron92):'—';
+    document.getElementById('dm-petrol-sub').textContent='updated '+l.date;
+  }
+
+  // ── KM per day ──
+  const kmDay=calcKMperDay(filteredCars,filteredFuel);
+  const kmDayEl=document.getElementById('dm-kmday');
+  const kmDaySubEl=document.getElementById('dm-kmday-sub');
+  if(kmDayEl)kmDayEl.textContent=kmDay>0?kmDay.toFixed(1):'—';
+  if(kmDaySubEl)kmDaySubEl.textContent=kmDay>0?'KM per day avg':'need more data';
+
+  // ── Daily cost ──
+  const dailyFuelCost=filteredFuel.length>0?(()=>{
+    const now2=new Date();
+    const ym2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
+    const monthFuelTotal=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym2)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const daysPassed=now2.getDate();
+    return daysPassed>0?monthFuelTotal/daysPassed:0;
+  })():0;
+  const dailySvcCost=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel);
+  const totalDailyCost=dailyFuelCost+dailySvcCost;
+  const dailyEl=document.getElementById('dm-daily');
+  const dailySubEl=document.getElementById('dm-daily-sub');
+  if(dailyEl)dailyEl.textContent=totalDailyCost>0?fmtPKR(Math.round(totalDailyCost)):'—';
+  if(dailySubEl)dailySubEl.textContent=totalDailyCost>0?'fuel ₨'+Math.round(dailyFuelCost)+' + svc ₨'+Math.round(dailySvcCost):'PKR per day';
+
+  // ── Monthly cost (fuel actual + service spread over month) ──
+  const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthFuel=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const monthlySvcSpread=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel)*daysInMonth;
+  const totalMonthly=monthFuel+monthlySvcSpread;
+  const monthlyEl=document.getElementById('dm-monthly');
+  const monthlySubEl=document.getElementById('dm-monthly-sub');
+  if(monthlyEl)monthlyEl.textContent=totalMonthly>0?fmtPKR(Math.round(totalMonthly)):'—';
+  if(monthlySubEl)monthlySubEl.textContent=totalMonthly>0?'fuel ₨'+fmtPKR(Math.round(monthFuel))+' + svc est.':'fuel + service PKR';
+
+  renderCarCards('dash-cars',filteredCars.slice(0,6));
+  const svcAlerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
+  renderSvcAlerts('dash-services',svcAlerts);
+}
+
+// ── CAR CARDS ─────────────────────────────────────────────────────
+const COLORS=['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+function carColor(i){return COLORS[i%COLORS.length];}
+
+function renderCarCards(elId,list){
+  const el=document.getElementById(elId);
+  if(!list||!list.length){el.innerHTML=`<div class="empty-state"><i class="ti ti-car-off"></i><h3>No cars</h3><p>Add your first car to get started.</p></div>`;return;}
+  el.innerHTML=list.map((c,idx)=>{
+    const ci=cars.indexOf(c)>=0?cars.indexOf(c):idx;
+    const col=carColor(ci);
+    const logs=fuelLogs.filter(f=>f.carId===c.id&&f.fillType==='full'&&f.kmpl>0);
+    const avg=logs.length?(logs.reduce((a,b)=>a+b.kmpl,0)/logs.length).toFixed(1):'—';
+    const lastFuel=fuelLogs.filter(f=>f.carId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+    const svcList=serviceLogs.filter(s=>s.carId===c.id);
+    const overdue=svcList.filter(s=>svcStatus(s)==='overdue').length;
+    const pl=c.status==='sold'&&c.soldAt&&c.boughtAt?(parseFloat(c.soldAt)-parseFloat(c.boughtAt)):null;
+    const totalSvcCost=svcList.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const trueOdo=getTrueOdo(c.id);
+    const kmDriven=trueOdo-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
+
+    return `<div class="car-card" onclick="openCarDetail('${c.id}')">
+      <div class="car-card-top">
+        <div class="car-icon" style="background:${col}22;color:${col}"><i class="ti ti-car"></i></div>
+        <div class="car-info">
+          <h3>${c.make||''} ${c.model||''} ${c.variant||''}</h3>
+          <p>${c.year||''} · ${c.reg||'No reg'}</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <span class="badge ${c.status||'owned'}">${c.status||'owned'}</span>
+          ${overdue>0?`<span class="badge overdue">${overdue} overdue</span>`:''}
+        </div>
+      </div>
+      <div class="car-card-stats">
+        <div class="cs"><div class="cs-label">Fuel Avg (KM/L)</div><div class="cs-val" style="color:${col}">${avg}</div></div>
+        <div class="cs"><div class="cs-label">Last Fill</div><div class="cs-val">${lastFuel?lastFuel.date:'—'}</div></div>
+        <div class="cs"><div class="cs-label">Odometer</div><div class="cs-val">${fmtKM(trueOdo)} KM</div></div>
+        <div class="cs"><div class="cs-label">KM Driven</div><div class="cs-val">${kmDriven>0?fmtKM(kmDriven)+' KM':'—'}</div></div>
+        ${pl!==null
+          ?`<div class="cs"><div class="cs-label">Sold For</div><div class="cs-val">${fmtPKR(c.soldAt)}</div></div>
+            <div class="cs"><div class="cs-label">P&L</div><div class="cs-val" style="color:${pl>=0?'var(--green)':'var(--red)'}">${pl>=0?'+':''}${fmtPKR(pl)}</div></div>`
+          :`<div class="cs"><div class="cs-label">Svc Cost Total</div><div class="cs-val">${fmtPKR(totalSvcCost)}</div></div>
+            <div class="cs"><div class="cs-label">Bought For</div><div class="cs-val">${c.boughtAt?fmtPKR(c.boughtAt):'—'}</div></div>`
+        }
+      </div>
+      ${c.status!=='sold'?`<div class="car-card-footer">
+        <button class="action-chip" onclick="event.stopPropagation();showModal('fuel',{carId:'${c.id}'})"><i class="ti ti-droplet"></i>Fill-up</button>
+        <button class="action-chip" onclick="event.stopPropagation();showModal('service',{carId:'${c.id}'})"><i class="ti ti-tool"></i>Service</button>
+        <button class="action-chip" onclick="event.stopPropagation();showModal('odo',{carId:'${c.id}'})"><i class="ti ti-road"></i>ODO</button>
+        <button class="action-chip" onclick="event.stopPropagation();showModal('sell',{carId:'${c.id}'})"><i class="ti ti-tag"></i>Sell</button>
+        <button class="action-chip" onclick="event.stopPropagation();showModal('car',cars.find(x=>x.id==='${c.id}'))"><i class="ti ti-edit"></i>Edit</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderCarList(){
+  let list=cars;
+  if(carsFilter==='owned')list=cars.filter(c=>c.status==='owned');
+  else if(carsFilter==='sold')list=cars.filter(c=>c.status==='sold');
+  else if(carsFilter==='installment')list=cars.filter(c=>c.hasInstallment);
+  document.getElementById('cars-sub').textContent=`${list.length} of ${cars.length} shown`;
+  renderCarCards('cars-list',list);
+}
+
+// ── GET TRUE CURRENT ODOMETER (max across all logs) ──────────────
+function getTrueOdo(carId){
+  const car=cars.find(c=>c.id===carId);
+  const carOdo=parseFloat(car?.odometer||0);
+  // Get max from fuel logs
+  const maxFuelOdo=fuelLogs.filter(f=>f.carId===carId&&f.odometer>0)
+    .reduce((max,f)=>Math.max(max,parseFloat(f.odometer||0)),0);
+  // Get max from service logs
+  const maxSvcOdo=serviceLogs.filter(s=>s.carId===carId&&s.odometer>0)
+    .reduce((max,s)=>Math.max(max,parseFloat(s.odometer||0)),0);
+  // Return highest of all three
+  return Math.max(carOdo,maxFuelOdo,maxSvcOdo);
+}
+
+// ── SERVICE STATUS ────────────────────────────────────────────────
+function svcStatus(s){
+  const odo=getTrueOdo(s.carId);
+  const nextDue=parseFloat(s.nextDueOdo||0);
+  if(!nextDue)return s.status||'ok';
+  const kl=nextDue-odo;
+  if(kl<0)return'overdue';
+  if(kl<500)return'due-soon';
+  return'ok';
+}
+
+function kmLeft(s){
+  const odo=getTrueOdo(s.carId);
+  const nextDue=parseFloat(s.nextDueOdo||0);
+  if(!nextDue)return null;
+  return nextDue-odo;
+}
+
+function daysSince(dateStr){
+  if(!dateStr)return null;
+  const diff=Date.now()-new Date(dateStr).getTime();
+  return Math.floor(diff/(1000*60*60*24));
+}
+
+// ── FUEL LOG CAR FILTER ──────────────────────────────────────────
+function buildFuelCarFilter(){
+  const wrap=document.getElementById('fuel-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(fuelCarId===null?'active':'')+'" onclick="setFuelCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(fuelCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setFuelCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+window.setFuelCar=function(carId,btn){
+  fuelCarId=carId;
+  document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderFuelLog();
+}
+
+function renderFuelMonthSummary(filteredLogs){
+  const el=document.getElementById('fuel-month-summary');
+  if(!el)return;
+  const now=new Date();
+  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisMonth=filteredLogs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
+  const totalCost=thisMonth.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const totalLitres=thisMonth.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const fullFills=filteredLogs.filter(f=>f.fillType==='full'&&f.kmpl>0);
+  const avgKmpl=fullFills.length?(fullFills.reduce((a,b)=>a+b.kmpl,0)/fullFills.length).toFixed(1):null;
+  // Days between fills avg
+  const sortedFills=[...filteredLogs].filter(f=>!f.isMissed&&f.odometer).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let avgDays=null;
+  if(sortedFills.length>=2){
+    const gaps=[];
+    for(let i=1;i<sortedFills.length;i++){
+      const d=(new Date(sortedFills[i].date)-new Date(sortedFills[i-1].date))/(1000*60*60*24);
+      if(d>0)gaps.push(d);
+    }
+    avgDays=gaps.length?(gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(0):null;
+  }
+  const lastFill=sortedFills[sortedFills.length-1];
+  const daysSinceLast=lastFill?Math.floor((Date.now()-new Date(lastFill.date).getTime())/(1000*60*60*24)):null;
+
+  el.innerHTML=[
+    {label:'This Month Cost',val:totalCost>0?'₨'+fmtPKR(totalCost):'—',sub:'PKR',accent:'var(--gold)'},
+    {label:'This Month Litres',val:totalLitres>0?totalLitres.toFixed(1)+' L':'—',sub:'filled',accent:'var(--blue)'},
+    {label:'Avg KM/L',val:avgKmpl?avgKmpl+' KM/L':'—',sub:'full fills only',accent:'var(--green)'},
+    {label:'Avg Days/Fill',val:avgDays?avgDays+' days':'—',sub:'between fill-ups',accent:'var(--purple)'},
+    {label:'Last Fill',val:daysSinceLast!==null?daysSinceLast+' days ago':'—',sub:lastFill?lastFill.date:'',accent:'var(--amber)'},
+  ].map(m=>`<div class="metric" style="--accent:${m.accent}">
+    <div class="m-label">${m.label}</div>
+    <div class="m-val" style="font-size:18px;color:${m.accent}">${m.val}</div>
+    <div class="m-sub">${m.sub}</div>
+  </div>`).join('');
+}
+
+// ── SERVICE CAR FILTER ───────────────────────────────────────────
+function buildSvcCarFilter(){
+  const wrap=document.getElementById('svc-car-filter');
+  if(!wrap)return;
+  wrap.innerHTML='<button class="tab-btn '+(svcCarId===null?'active':'')+'" onclick="setSvcCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
+  cars.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(svcCarId===c.id?' active':'');
+    btn.style.cssText='font-size:12px;padding:5px 12px';
+    btn.textContent=c.make+' '+c.model;
+    btn.onclick=function(){setSvcCar(c.id,this);};
+    wrap.appendChild(btn);
+  });
+}
+window.setSvcCar=function(carId,btn){
+  svcCarId=carId;
+  document.querySelectorAll('#svc-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderServiceLog();
+}
+
+// ── FUEL LOG ──────────────────────────────────────────────────────
+function renderFuelLog(){
+  buildFuelCarFilter();
+  const filteredFuelLog=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  renderFuelMonthSummary(filteredFuelLog);
+  const tbody=document.getElementById('fuel-tbody');
+  if(!filteredFuelLog.length){tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
+
+  // Build per-car sorted fuel log to calculate distance on the fly
+  const carLogs={};
+  filteredFuelLog.forEach(f=>{
+    if(!carLogs[f.carId])carLogs[f.carId]=[];
+    carLogs[f.carId].push(f);
+  });
+  // Sort each car's logs by odometer ascending
+  Object.keys(carLogs).forEach(cid=>{
+    carLogs[cid].sort((a,b)=>parseFloat(a.odometer||0)-parseFloat(b.odometer||0));
+  });
+  // For each log, find previous non-missed entry for same car
+  function getPrevFuel(f){
+    const logs=carLogs[f.carId]||[];
+    const idx=logs.findIndex(x=>x.id===f.id);
+    // Find previous non-missed entry
+    for(let i=idx-1;i>=0;i--){
+      if(!logs[i].isMissed&&logs[i].fillType!=='missed'&&parseFloat(logs[i].odometer||0)>0)return logs[i];
+    }
+    return null;
+  }
+  function getCalcDistance(f){
+    if(f.isMissed||f.fillType==='missed')return null;
+    if(f.distance&&parseFloat(f.distance)>0)return parseFloat(f.distance);
+    const prev=getPrevFuel(f);
+    if(!prev)return null;
+    const d=parseFloat(f.odometer||0)-parseFloat(prev.odometer||0);
+    return d>0?d:null;
+  }
+  function getCalcKmpl(f){
+    if(f.kmpl&&parseFloat(f.kmpl)>0)return parseFloat(f.kmpl);
+    if(f.fillType!=='full')return null;
+    const dist=getCalcDistance(f);
+    const litres=parseFloat(f.litres||0);
+    if(dist&&litres>0)return parseFloat((dist/litres).toFixed(2));
+    return null;
+  }
+
+  tbody.innerHTML=filteredFuelLog.map(f=>{
+    const car=cars.find(c=>c.id===f.carId);
+    const actionBtns=`<td style="white-space:nowrap">
+        <button onclick="event.stopPropagation();editFuel('${f.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
+        <button onclick="event.stopPropagation();deleteFuel('${f.id}')" style="background:var(--red-bg);border:1px solid rgba(248,113,113,0.2);border-radius:5px;color:var(--red);padding:3px 8px;cursor:pointer;font-size:11px"><i class="ti ti-trash" style="font-size:12px"></i></button>
+      </td>`;
+    // Missed checkpoint row
+    if(f.isMissed||f.fillType==='missed'){
+      return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
+        <td class="mono">${f.date}</td>
+        <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+        <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
+        <td class="mono">${fmtKM(f.odometer)} KM</td>
+        <td>—</td>
+        <td><span class="badge" style="background:var(--amber-bg);color:var(--amber)">Missed</span></td>
+        ${actionBtns}
+      </tr>`;
+    }
+    const ppl=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
+    const calcDist=getCalcDistance(f);
+    const calcKmpl=getCalcKmpl(f);
+    const distWasCalc=calcDist&&!(f.distance&&parseFloat(f.distance)>0);
+    // Days since last refill for this car
+    const prevFuel=getPrevFuel(f);
+    const daysSincePrev=prevFuel?Math.round((new Date(f.date)-new Date(prevFuel.date))/(1000*60*60*24)):null;
+    return`<tr>
+      <td class="mono">${f.date}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td>${f.station||'—'}</td>
+      <td>${f.fuelType||'—'}</td>
+      <td class="mono">${f.litres} L</td>
+      <td class="mono">${ppl!=='—'?'₨'+ppl:'—'}</td>
+      <td class="gold mono">₨${fmt(f.cost)}</td>
+      <td class="mono">${fmtKM(f.odometer)} KM</td>
+      <td class="mono ${distWasCalc?'amber':''}" title="${distWasCalc?'Auto-calculated from odometer difference':''}">${calcDist?fmtKM(calcDist)+' KM'+(distWasCalc?' *':''):'—'}</td>
+      <td class="mono" style="color:var(--text3)">${daysSincePrev!==null?daysSincePrev+' days':'—'}</td>
+      <td class="${f.fillType==='full'&&calcKmpl?(calcKmpl>14?'green':calcKmpl>10?'amber':'red'):'blue'} mono">${calcKmpl?calcKmpl.toFixed(1)+(distWasCalc?' *':''):'~—'}</td>
+      <td><span class="badge ${f.fillType==='full'?'full':'partial'}">${f.fillType==='full'?'Full':'Partial'}</span></td>
+      ${actionBtns}
+    </tr>`;
+  }).join('');
+}
+
+// ── SERVICE LOG ───────────────────────────────────────────────────
+function renderServiceLog(){
+  buildSvcCarFilter();
+  const filteredSvcLog=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
+  const tbody=document.getElementById('svc-tbody');
+  const alerts=filteredSvcLog.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon');
+  renderSvcAlerts('svc-alerts-list',alerts);
+  renderSvcAlerts('dash-services',alerts.slice(0,5));
+
+  const cnt=alerts.length;
+  document.getElementById('dm-alerts').textContent=cnt;
+  const badge=document.getElementById('svc-badge');
+  badge.style.display=cnt>0?'inline':'none';
+  if(cnt>0)badge.textContent=cnt;
+
+  if(!filteredSvcLog.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;return;}
+  tbody.innerHTML=filteredSvcLog.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const st=svcStatus(s);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    const curOdo=car?parseFloat(car.odometer||0):0;
+    return`<tr>
+      <td class="mono">${s.date}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td>${s.type}</td>
+      <td class="gold mono">₨${fmt(s.cost)}</td>
+      <td class="mono">${fmtKM(s.odometer)} KM</td>
+      <td class="blue mono">${getTrueOdo(s.carId)>0?fmtKM(getTrueOdo(s.carId))+' KM':'—'}</td>
+      <td class="mono">${s.nextDueOdo?fmtKM(s.nextDueOdo)+' KM':'—'}</td>
+      <td class="${kl===null?'':kl<0?'red':kl<500?'amber':'green'} mono">${kl===null?'—':kl<0?'⚠ Overdue '+fmtKM(Math.abs(kl))+' KM':fmtKM(kl)+' KM left'}</td>
+      <td class="mono">${ds!==null?ds+' days':'—'}</td>
+      <td><span class="badge ${st}">${st}</span></td>
+      <td>${s.receiptUrl?`<a href="${s.receiptUrl}" target="_blank" style="color:var(--blue);font-size:12px"><i class="ti ti-photo"></i> View</a>`:'—'}</td>
+      <td style="white-space:nowrap">
+        <button onclick="event.stopPropagation();editService('${s.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
+        <button onclick="event.stopPropagation();deleteService('${s.id}')" style="background:var(--red-bg);border:1px solid rgba(248,113,113,0.2);border-radius:5px;color:var(--red);padding:3px 8px;cursor:pointer;font-size:11px"><i class="ti ti-trash" style="font-size:12px"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSvcAlerts(elId,list){
+  const el=document.getElementById(elId);if(!el)return;
+  if(!list.length){el.innerHTML=`<div class="empty-state" style="padding:24px"><i class="ti ti-circle-check"></i><h3>All clear!</h3></div>`;return;}
+  el.innerHTML=list.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const st=svcStatus(s);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    return`<div class="service-item">
+      <div class="svc-icon ${st==='overdue'?'red':'amber'}"><i class="ti ti-tool"></i></div>
+      <div class="svc-main"><h4>${car?`${car.make} ${car.model}`:'Unknown'}</h4><p>${s.type}</p></div>
+      <div class="svc-right">
+        <div class="due" style="color:var(--${st==='overdue'?'red':'amber'})">${kl===null?'Check':kl<0?'Overdue '+fmtKM(Math.abs(kl))+'KM':fmtKM(kl)+' KM left'}</div>
+        <div class="days">${ds!==null?'Last: '+ds+' days ago':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── P&L ───────────────────────────────────────────────────────────
+function renderPL(){
+  const tbody=document.getElementById('pl-tbody');
+  let totalIn=0,totalOut=0;
+  const rows=cars.map(c=>{
+    const fuelCost=fuelLogs.filter(f=>f.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const svcCost=serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const bought=parseFloat(c.boughtAt||0);
+    const sold=parseFloat(c.soldAt||0);
+    const trueOdo=getTrueOdo(c.id);
+    const kmDriven=trueOdo-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
+    const totalSpent=bought+fuelCost+svcCost;
+    const costPerKm=kmDriven>0?(totalSpent/kmDriven).toFixed(2):null;
+    const pl=c.status==='sold'?sold-bought:null;
+    if(c.status==='sold'){totalIn+=bought;totalOut+=sold;}
+    return{c,fuelCost,svcCost,bought,sold,pl,costPerKm,kmDriven};
+  });
+
+  document.getElementById('pl-invested').textContent='₨'+fmtPKR(totalIn);
+  document.getElementById('pl-sold').textContent='₨'+fmtPKR(totalOut);
+  const net=totalOut-totalIn;
+  const netEl=document.getElementById('pl-net');
+  netEl.textContent=(net>=0?'+':'')+'₨'+fmtPKR(Math.abs(net));
+  netEl.style.color=net>=0?'var(--green)':'var(--red)';
+
+  if(!rows.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state" style="padding:30px"><i class="ti ti-chart-bar"></i><h3>No cars yet</h3></div></td></tr>`;return;}
+  tbody.innerHTML=rows.map(({c,fuelCost,svcCost,bought,sold,pl,costPerKm})=>`<tr>
+    <td class="primary">${c.make} ${c.model} ${c.year||''}</td>
+    <td class="mono">₨${fmtPKR(bought)}</td>
+    <td class="mono">₨${fmtPKR(fuelCost)}</td>
+    <td class="mono">₨${fmtPKR(svcCost)}</td>
+    <td class="mono">${costPerKm?'₨'+costPerKm+'/KM':'—'}</td>
+    <td class="mono">${c.status==='sold'?'₨'+fmtPKR(sold):'—'}</td>
+    <td class="${pl===null?'':(pl>=0?'green':'red')}">${pl===null?'Owned':(pl>=0?'+':'')+'₨'+fmtPKR(Math.abs(pl))}</td>
+    <td class="${pl===null?'':(pl>=0?'green':'red')}">${pl===null?'—':(bought>0?((pl/bought)*100).toFixed(1)+'%':'—')}</td>
+  </tr>`).join('');
+}
+
+// ── INSTALLMENTS ──────────────────────────────────────────────────
+function renderInstallments(){
+  const tbody=document.getElementById('install-tbody');
+  const inst=cars.filter(c=>c.hasInstallment&&c.status!=='sold');
+  if(!inst.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state" style="padding:30px"><i class="ti ti-credit-card"></i><h3>No active installments</h3></div></td></tr>`;return;}
+  tbody.innerHTML=inst.map(c=>{
+    const loan=parseFloat(c.loanAmount||0);
+    const emi=parseFloat(c.monthlyEMI||0);
+    const left=parseInt(c.monthsLeft||0);
+    const remaining=emi*left;
+    const paid=Math.max(0,loan-remaining);
+    return`<tr>
+      <td class="primary">${c.make} ${c.model} ${c.year||''}</td>
+      <td class="mono">₨${fmtPKR(loan)}</td>
+      <td class="amber mono">₨${fmt(emi)}/mo</td>
+      <td class="green mono">₨${fmtPKR(paid)}</td>
+      <td class="mono">₨${fmtPKR(remaining)}</td>
+      <td class="amber mono">${left} months</td>
+      <td class="mono">${c.emiDate||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── FUEL PRICES ───────────────────────────────────────────────────
+function renderFuelPrices(){
+  const tbody=document.getElementById('fp-tbody');
+  const cards=document.getElementById('fp-cards');
+  if(!fuelPrices.length){
+    cards.innerHTML=`<div class="empty-state" style="padding:30px"><i class="ti ti-gas-station"></i><h3>No prices added</h3></div>`;
+    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state" style="padding:24px"><i class="ti ti-history"></i><h3>No history</h3></div></td></tr>`;
+    return;
+  }
+  const latest=fuelPrices[0];
+  const prev=fuelPrices[1]||{};
+  document.getElementById('fp-date').textContent='Last updated: '+latest.date;
+
+  const types=[{k:'ron92',l:'RON-92',i:'ti-gas-station'},{k:'ron95',l:'RON-95',i:'ti-gas-station'},{k:'hsd',l:'HSD Diesel',i:'ti-droplet'},{k:'cng',l:'CNG',i:'ti-flame'}];
+  cards.innerHTML=types.map(t=>{
+    const v=parseFloat(latest[t.k]||0);
+    const o=parseFloat(prev[t.k]||v);
+    const d=(v-o).toFixed(2);
+    const cls=d>0?'up':d<0?'dn':'nc';
+    const arr=d>0?'↑':d<0?'↓':'→';
+    return`<div class="fp-card">
+      <div class="fp-card-head"><i class="ti ${t.i}"></i><span>${t.l}</span></div>
+      <div class="fp-price">₨${v}<span>/L</span></div>
+      <div class="fp-change ${cls}">${arr} ₨${Math.abs(d)} vs prev</div>
+    </div>`;
+  }).join('');
+
+  tbody.innerHTML=fuelPrices.map(p=>`<tr>
+    <td class="mono">${p.date}</td>
+    <td class="gold mono">${p.ron92?'₨'+p.ron92:'—'}</td>
+    <td class="mono">${p.ron95?'₨'+p.ron95:'—'}</td>
+    <td class="mono">${p.hsd?'₨'+p.hsd:'—'}</td>
+    <td class="mono">${p.cng?'₨'+p.cng:'—'}</td>
+    <td class="mono">${p.source||'Manual'}</td>
+  </tr>`).join('');
+}
+
+// ── INSIGHTS ──────────────────────────────────────────────────────
+function renderInsights(){
+  const grid=document.getElementById('insights-grid');
+  const items=[];
+
+  cars.filter(c=>c.status==='owned').forEach(c=>{
+    const logs=fuelLogs.filter(f=>f.carId===c.id&&f.fillType==='full'&&f.kmpl>0).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(logs.length>=4){
+      const recent=logs.slice(-3).reduce((a,b)=>a+b.kmpl,0)/3;
+      const older=logs.slice(0,3).reduce((a,b)=>a+b.kmpl,0)/3;
+      const drop=((older-recent)/older*100).toFixed(0);
+      if(drop>10)items.push({icon:'ti-alert-triangle',col:'var(--amber)',title:`${c.make} ${c.model} — Fuel drop`,text:`Average KM/L dropped ${drop}% recently (${older.toFixed(1)} → ${recent.toFixed(1)} KM/L). May need a service.`});
     }
   });
-  // Also hide kmpl preview
-  const prev=document.getElementById('kmpl-preview');
-  if(prev)prev.style.display='none';
+
+  // Best fuel station
+  const stationMap={};
+  fuelLogs.filter(f=>f.station&&f.litres&&f.cost).forEach(f=>{
+    const ppl=parseFloat(f.cost)/parseFloat(f.litres);
+    if(!stationMap[f.station])stationMap[f.station]={total:0,count:0};
+    stationMap[f.station].total+=ppl;stationMap[f.station].count++;
+  });
+  const stations=Object.entries(stationMap).map(([n,v])=>({name:n,avg:v.total/v.count})).sort((a,b)=>a.avg-b.avg);
+  if(stations.length>0)items.push({icon:'ti-star',col:'var(--gold)',title:'Best fuel station by price',text:`${stations[0].name} has the lowest average price at ₨${stations[0].avg.toFixed(2)}/L.`});
+
+  // Most expensive car to maintain
+  if(cars.length>1){
+    const costs=cars.map(c=>({c,cost:serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0)})).sort((a,b)=>b.cost-a.cost);
+    if(costs[0].cost>0)items.push({icon:'ti-tools',col:'var(--red)',title:'Highest maintenance cost',text:`${costs[0].c.make} ${costs[0].c.model} has cost the most in services — ₨${fmtPKR(costs[0].cost)} total.`});
+  }
+
+  // Cost per KM
+  cars.filter(c=>c.odometer&&c.odoAtPurchase).forEach(c=>{
+    const kmDriven=parseFloat(c.odometer)-parseFloat(c.odoAtPurchase);
+    if(kmDriven>500){
+      const fuelCost=fuelLogs.filter(f=>f.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+      const svcCost=serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+      const cpk=((fuelCost+svcCost)/kmDriven).toFixed(2);
+      items.push({icon:'ti-road',col:'var(--blue)',title:`${c.make} ${c.model} — Cost per KM`,text:`Running cost is ₨${cpk} per KM driven (fuel + service combined).`});
+    }
+  });
+
+  if(!items.length){grid.innerHTML=`<div class="empty-state"><i class="ti ti-bulb"></i><h3>Add more data</h3><p>Insights appear after logging fuel fill-ups and service records.</p></div>`;return;}
+  grid.innerHTML=items.map(i=>`<div class="insight-card">
+    <div class="insight-icon" style="background:${i.col}20;color:${i.col}"><i class="ti ${i.icon}"></i></div>
+    <div class="insight-text"><h4>${i.title}</h4><p>${i.text}</p></div>
+  </div>`).join('');
 }
+
+// ── SERVICE TYPES ─────────────────────────────────────────────────
+function renderServiceTypes(){
+  const el=document.getElementById('svc-types-list');
+  if(!el)return;
+  el.innerHTML=svcTypes.map((t,i)=>`<div class="svc-type-chip" style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;display:inline-flex;align-items:center;gap:8px;padding:6px 14px;margin:3px;font-size:13px;color:var(--text2)">${t}<button onclick="removeSvcType(${i})" title="Remove ${t}" style="background:none;border:none;color:var(--text3);cursor:pointer;display:flex;align-items:center;padding:0;font-size:15px;line-height:1;transition:color 0.15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'"><i class="ti ti-x"></i></button></div>`).join('');
+  // Also refresh the dropdown in any open modal
+  const sel=document.getElementById('f-stype');
+  if(sel&&sel.tagName==='SELECT'){
+    const cur=sel.value;
+    sel.innerHTML=svcTypes.map(t=>`<option value="${t}" ${t===cur?'selected':''}>${t}</option>`).join('');
+  }
+}
+window.addSvcType=function(){
+  const inp=document.getElementById('new-svc-type');
+  const val=inp.value.trim();
+  if(!val)return;
+  if(svcTypes.includes(val)){showToast('Already exists','error');return;}
+  svcTypes.push(val);
+  localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
+  inp.value='';renderServiceTypes();showToast('Service type added!');
+}
+window.removeSvcType=function(i){
+  if(!confirm('Remove "'+svcTypes[i]+'"?'))return;
+  svcTypes.splice(i,1);
+  localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
+  renderServiceTypes();showToast('Removed');
+}
+// ── ODOMETER QUICK UPDATE ─────────────────────────────────────────
+window.showOdoModal=function(carId){showModal('odo',{carId});}
+
+// ── NEXT DUE CALCULATOR ───────────────────────────────────────────
+window.syncNextDueBase=function(){
+  // When car or service odo changes, we don't auto-fill anymore
+  // Just recalculate if user already typed something
+  calcNextDue();
+}
+window.calcNextDue=function(){
+  const inp=document.getElementById('f-next-odo');
+  const ghost=document.getElementById('f-next-odo-ghost');
+  const calcSpan=document.getElementById('f-next-odo-calc');
+  const hint=document.getElementById('f-next-odo-hint');
+  if(!inp)return;
+  const raw=inp.value.trim();
+  if(!raw){if(ghost)ghost.style.display='none';inp.dataset.computed='';return;}
+  try{
+    const safe=raw.replace(/[^0-9 +\-*/.]/g,'');
+    if(!safe){if(ghost)ghost.style.display='none';return;}
+    const result=Function('"use strict";return ('+safe+')')();
+    if(isNaN(result)||result<=0){if(ghost)ghost.style.display='none';return;}
+    const rounded=Math.round(result);
+    inp.dataset.computed=rounded;
+    if(/[+\-*/]/.test(raw)){
+      if(calcSpan)calcSpan.textContent=rounded.toLocaleString();
+      if(ghost)ghost.style.display='block';
+      if(hint)hint.textContent='Press Enter to confirm '+rounded.toLocaleString()+' KM';
+    } else {
+      inp.dataset.computed=rounded;
+      if(ghost)ghost.style.display='none';
+    }
+  }catch(e){if(ghost)ghost.style.display='none';}
+}
+window.fillNextDue=function(){
+  const inp=document.getElementById('f-next-odo');
+  const ghost=document.getElementById('f-next-odo-ghost');
+  const hint=document.getElementById('f-next-odo-hint');
+  const computed=inp&&inp.dataset.computed;
+  if(!computed||!parseFloat(computed))return;
+  inp.value=parseFloat(computed).toLocaleString('en-PK');
+  inp.dataset.computed=computed;
+  if(ghost)ghost.style.display='none';
+  if(hint)hint.textContent='Set to '+parseFloat(computed).toLocaleString()+' KM';
+}
+
+
+// ── SERVICE STATION AUTOCOMPLETE ─────────────────────────────────
+function getSvcStations(){return[...new Set(serviceLogs.map(s=>s.station).filter(Boolean))];}
+
+// ── RENDER REMINDERS PAGE ─────────────────────────────────────────
+function renderReminders(){
+  const latest={}; // keep only latest service per car+type
+  [...serviceLogs].reverse().forEach(s=>{
+    const key=s.carId+'__'+s.type;
+    if(!latest[key])latest[key]=s;
+  });
+  const all=Object.values(latest);
+  const overdue=all.filter(s=>svcStatus(s)==='overdue');
+  const dueSoon=all.filter(s=>svcStatus(s)==='due-soon');
+  const ok=all.filter(s=>svcStatus(s)==='ok');
+
+  // Update badge
+  const total=overdue.length+dueSoon.length;
+  const badge=document.getElementById('rem-badge');
+  if(badge){badge.style.display=total>0?'inline':'none';badge.textContent=total;}
+
+  renderReminderList('rem-overdue', overdue, 'overdue');
+  renderReminderList('rem-due-soon', dueSoon, 'due-soon');
+  renderReminderList('rem-ok', ok, 'ok');
+  renderSvcProgress('rem-progress');
+  renderSvcProgress('dash-svc-progress');
+  renderSvcTimeline();
+}
+
+function renderReminderList(elId, list, status){
+  const el=document.getElementById(elId); if(!el)return;
+  if(!list.length){el.innerHTML='<div style="padding:14px 16px;font-size:13px;color:var(--text3)">None</div>';return;}
+  el.innerHTML=list.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    const col=status==='overdue'?'red':status==='due-soon'?'amber':'green';
+    const nextDueOdo=s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString():null;
+    const curOdo=car?getTrueOdo(car.id).toLocaleString():null;
+    let dueInfo='';
+    if(nextDueOdo){
+      if(kl<0) dueInfo='Was due at '+nextDueOdo+' KM — now at '+curOdo+' KM';
+      else dueInfo='Due at '+nextDueOdo+' KM (now: '+curOdo+' KM)';
+    }
+    return`<div class="service-item" style="${status==='overdue'?'border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.03)':''}">
+      <div class="svc-icon ${col}"><i class="ti ti-tool"></i></div>
+      <div class="svc-main">
+        <h4>${car?car.make+' '+car.model:'Unknown'} — ${s.type}</h4>
+        <p style="margin-top:3px">${s.station?'📍 '+s.station+' &nbsp;·&nbsp; ':''} Last done: ${s.date}${ds!==null?' ('+ds+' days ago)':''}</p>
+        ${dueInfo?`<p style="margin-top:2px;color:var(--${col});font-size:12px">🎯 ${dueInfo}</p>`:''}
+      </div>
+      <div class="svc-right">
+        <div class="due" style="color:var(--${col});font-size:14px;font-weight:700">${kl===null?'—':kl<0?'⚠️ Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</div>
+        <div class="days" style="margin-top:4px">${kl!==null&&kl>0?'Est. '+Math.round(kl/50)+' fill-ups away':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSvcProgress(elId){
+  const el=document.getElementById(elId); if(!el)return;
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const all=Object.values(latest).filter(s=>s.nextDueOdo&&s.odometer);
+  if(!all.length){el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:10px">No service records with odometer data yet.</div>`;return;}
+  el.innerHTML=all.map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const done=parseFloat(s.odometer)||0;
+    const due=parseFloat(s.nextDueOdo)||0;
+    const cur=car?getTrueOdo(car.id):done;
+    const total=due-done; if(total<=0)return'';
+    const used=cur-done;
+    const pct=Math.min(100,Math.max(0,(used/total)*100));
+    const kl=due-cur;
+    const st=svcStatus(s);
+    const col=st==='overdue'?'var(--red)':st==='due-soon'?'var(--amber)':'var(--green)';
+    return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;${st==='overdue'?'border-color:rgba(248,113,113,0.4)':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <span style="font-size:13px;font-weight:600">${car?car.make+' '+car.model:'?'}</span>
+          <span style="font-size:12px;color:var(--text3);margin-left:8px">${s.type}</span>
+        </div>
+        <span style="font-size:12px;font-weight:600;color:${col}">${kl<0?'Overdue '+Math.abs(kl).toLocaleString()+' KM':kl.toLocaleString()+' KM left'}</span>
+      </div>
+      <div style="background:var(--bg4);border-radius:20px;height:8px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${col};border-radius:20px;transition:width 0.5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--text3)">
+        <span>${done.toLocaleString()} KM (last done)</span>
+        <span>${cur.toLocaleString()} KM (now)</span>
+        <span>${due.toLocaleString()} KM (due)</span>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+}
+
+function renderSvcTimeline(){
+  const d=chartDefaults();
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const all=Object.values(latest).filter(s=>s.nextDueOdo).slice(0,10);
+  if(!all.length)return;
+  const labels=all.map(s=>{const c=cars.find(x=>x.id===s.carId);return(c?c.make.slice(0,6):'')+' '+s.type.slice(0,12);});
+  const doneData=all.map(s=>parseFloat(s.odometer)||0);
+  const dueData=all.map(s=>parseFloat(s.nextDueOdo)||0);
+  const curData=all.map(s=>{const c=cars.find(x=>x.id===s.carId);return parseFloat(c?.odometer||0);});
+  mkChart('chart-svc-timeline',{type:'bar',data:{labels,datasets:[
+    {label:'Last Done (KM)',data:doneData,backgroundColor:'rgba(96,165,250,0.6)',borderRadius:4},
+    {label:'Current ODO (KM)',data:curData,backgroundColor:'rgba(251,191,36,0.6)',borderRadius:4},
+    {label:'Next Due (KM)',data:dueData,backgroundColor:'rgba(74,222,128,0.6)',borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}}});
+}
+
+// ── EXPORT REMINDERS PDF ──────────────────────────────────────────
+window.exportReminders=function(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(16);doc.text('FleetLedger — Service Reminders',14,18);
+  doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
+  const latest={};
+  [...serviceLogs].reverse().forEach(s=>{const k=s.carId+'__'+s.type;if(!latest[k])latest[k]=s;});
+  const rows=Object.values(latest).map(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const kl=kmLeft(s);
+    const ds=daysSince(s.date);
+    return[car?`${car.make} ${car.model}`:'?',s.type,s.date,ds!==null?ds+' days':'—',s.nextDueOdo?parseFloat(s.nextDueOdo).toLocaleString()+' KM':'—',kl===null?'—':kl<0?'Overdue '+Math.abs(kl).toLocaleString()+'KM':kl.toLocaleString()+' KM',svcStatus(s).toUpperCase()];
+  });
+  doc.autoTable({startY:32,head:[['Car','Service','Last Date','Days Since','Next Due','KM Left','Status']],body:rows,styles:{fontSize:9},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]},didParseCell:function(data){if(data.section==='body'&&data.column.index===6){const v=data.cell.raw;if(v==='OVERDUE')data.cell.styles.textColor=[248,113,113];else if(v==='DUE-SOON')data.cell.styles.textColor=[251,191,36];else data.cell.styles.textColor=[74,222,128];}}});
+  doc.save('ServiceReminders_'+new Date().toISOString().slice(0,10)+'.pdf');
+  showToast('PDF exported!');
+}
+
+window.checkSvcTypeSelect=function(sel){
+  if(sel.value==='__manage__'){
+    closeModal();
+    showPage('svc-types');
+    sel.selectedIndex=0;
+  }
+}
+window.resetSvcTypes=function(){
+  if(!confirm('Reset to default 27 service types? Your custom ones will be lost.'))return;
+  svcTypes=[...DEFAULT_SVC_TYPES];
+  localStorage.setItem('fl_svc_types',JSON.stringify(svcTypes));
+  renderServiceTypes();showToast('Reset to defaults!');
+}
+
+// ── TOKEN ALERTS ──────────────────────────────────────────────────
+function checkTokenAlerts(){
+  const alerts=cars.filter(c=>{
+    if(!c.tokenDate||c.status==='sold')return false;
+    const days=(new Date(c.tokenDate)-Date.now())/(1000*60*60*24);
+    return days<30;
+  });
+  ['token-alerts-dash','token-alerts-cars'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    if(!alerts.length){el.innerHTML='';return;}
+    el.innerHTML=alerts.map(c=>{
+      const days=Math.floor((new Date(c.tokenDate)-Date.now())/(1000*60*60*24));
+      return`<div class="token-alert"><i class="ti ti-calendar-event"></i><span><strong>${c.make} ${c.model}</strong> — Token renewal ${days<0?'was '+Math.abs(days)+' days ago':'in '+days+' days'} (${c.tokenDate})</span></div>`;
+    }).join('');
+  });
+}
+
+// ── NOTIFICATIONS PAGE ────────────────────────────────────────────
+function renderNotifications(){
+  const el=document.getElementById('notif-list');
+  const items=[];
+  serviceLogs.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').forEach(s=>{
+    const car=cars.find(c=>c.id===s.carId);
+    const st=svcStatus(s);const kl=kmLeft(s);
+    items.push({icon:'ti-tool',col:st==='overdue'?'var(--red)':'var(--amber)',title:`${car?car.make+' '+car.model:'Car'} — ${s.type}`,text:kl<0?'Overdue by '+fmtKM(Math.abs(kl))+' KM':fmtKM(kl)+' KM until due'});
+  });
+  cars.filter(c=>c.tokenDate&&c.status!=='sold').forEach(c=>{
+    const days=Math.floor((new Date(c.tokenDate)-Date.now())/(1000*60*60*24));
+    if(days<30)items.push({icon:'ti-calendar',col:'var(--amber)',title:`${c.make} ${c.model} — Token Renewal`,text:days<0?`Overdue by ${Math.abs(days)} days`:`Due in ${days} days (${c.tokenDate})`});
+  });
+  if(!items.length){el.innerHTML=`<div class="empty-state"><i class="ti ti-bell-off"></i><h3>No alerts</h3><p>Everything looks good!</p></div>`;return;}
+  document.getElementById('notif-count').style.display='block';
+  el.innerHTML=items.map(i=>`<div class="insight-card"><div class="insight-icon" style="background:${i.col}20;color:${i.col}"><i class="ti ${i.icon}"></i></div><div class="insight-text"><h4>${i.title}</h4><p>${i.text}</p></div></div>`).join('');
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────
+function chartDefaults(){
+  const isDark=!document.body.classList.contains('light-mode');
+  return{
+    textColor:isDark?'#9898b8':'#4a4a6a',
+    gridColor:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)',
+    bg:isDark?'#161625':'#ffffff'
+  };
+}
+function mkChart(id,config){
+  if(chartInstances[id]){try{chartInstances[id].destroy();}catch(e){}}
+  const canvas=document.getElementById(id);if(!canvas)return;
+  chartInstances[id]=new Chart(canvas,config);
+}
+
+// ── INSIGHT CHARTS ───────────────────────────────────────────────
+function renderInsightCharts(){
+  const d=chartDefaults();
+  const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}};
+
+  // 1. Cost per KM trend per car
+  const cpkData=cars.map(c=>{
+    const logs=[...fuelLogs].filter(f=>f.carId===c.id&&!f.isMissed);
+    const totalCost=logs.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+    const odoSpan=getTrueOdo(c.id)-(c.odoAtPurchase!==null&&c.odoAtPurchase!==undefined?parseFloat(c.odoAtPurchase):0);
+    return{name:c.make+' '+c.model,cpk:odoSpan>0?(totalCost/odoSpan).toFixed(2):0};
+  }).filter(x=>x.cpk>0);
+  mkChart('chart-cost-per-km',{type:'bar',data:{labels:cpkData.map(x=>x.name),datasets:[{label:'PKR per KM',data:cpkData.map(x=>x.cpk),backgroundColor:COLORS.slice(0,cpkData.length).map(c=>c+'cc'),borderRadius:6}]},options:baseOpts});
+
+  // 2. Days between fill-ups per car
+  const freqDatasets=cars.map((c,i)=>{
+    const logs=[...fuelLogs].filter(f=>f.carId===c.id&&!f.isMissed&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const gaps=[];
+    for(let j=1;j<logs.length;j++){
+      const days=(new Date(logs[j].date)-new Date(logs[j-1].date))/(1000*60*60*24);
+      if(days>0)gaps.push({date:logs[j].date.slice(5),days:Math.round(days)});
+    }
+    return{label:c.make+' '+c.model,data:gaps.map(g=>g.days),dates:gaps.map(g=>g.date),color:COLORS[i%COLORS.length]};
+  }).filter(x=>x.data.length>0);
+  if(freqDatasets.length){
+    const allDates=[...new Set(freqDatasets.flatMap(x=>x.dates))].sort();
+    mkChart('chart-fill-freq',{type:'line',data:{labels:allDates,datasets:freqDatasets.map(ds=>({label:ds.label,data:allDates.map(d=>{const i=ds.dates.indexOf(d);return i>=0?ds.data[i]:null;}),borderColor:ds.color,backgroundColor:ds.color+'22',tension:0.3,pointRadius:4,fill:false}))},options:{...baseOpts,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}}}});
+  }
+
+  // 3. Fuel station comparison (avg KM/L)
+  const stationMap={};
+  fuelLogs.filter(f=>f.station&&f.fillType==='full'&&f.kmpl>0).forEach(f=>{
+    if(!stationMap[f.station])stationMap[f.station]={total:0,count:0};
+    stationMap[f.station].total+=f.kmpl;stationMap[f.station].count++;
+  });
+  const stations=Object.entries(stationMap).map(([n,v])=>({name:n,avg:(v.total/v.count).toFixed(2)})).sort((a,b)=>b.avg-a.avg);
+  if(stations.length){
+    mkChart('chart-station',{type:'bar',data:{labels:stations.map(s=>s.name),datasets:[{label:'Avg KM/L',data:stations.map(s=>s.avg),backgroundColor:stations.map((_,i)=>COLORS[i%COLORS.length]+'cc'),borderRadius:6}]},options:baseOpts});
+  }
+
+  // 4. KM/L Gauges per car
+  const gaugesEl=document.getElementById('insights-gauges');
+  if(gaugesEl){
+    gaugesEl.innerHTML=cars.map((c,i)=>{
+      const fills=fuelLogs.filter(f=>f.carId===c.id&&f.fillType==='full'&&f.kmpl>0);
+      if(!fills.length)return'';
+      const avg=fills.reduce((a,b)=>a+b.kmpl,0)/fills.length;
+      const max=18; // reference max KM/L
+      const pct=Math.min(100,(avg/max)*100);
+      const col=avg>12?'var(--green)':avg>8?'var(--amber)':'var(--red)';
+      const label=avg>12?'Efficient':avg>8?'Average':'Below Avg';
+      return`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px">${c.make} ${c.model}</div>
+        <div style="position:relative;width:120px;height:60px;margin:0 auto;overflow:hidden">
+          <div style="position:absolute;width:120px;height:120px;border-radius:50%;border:10px solid var(--bg4);top:0;left:0;clip:rect(0,120px,60px,0)"></div>
+          <div style="position:absolute;width:120px;height:120px;border-radius:50%;border:10px solid ${col};top:0;left:0;clip:rect(0,120px,60px,0);transform:rotate(${pct*1.8}deg);transform-origin:60px 60px;transition:transform 0.5s"></div>
+          <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);font-size:18px;font-weight:700;color:${col}">${avg.toFixed(1)}</div>
+        </div>
+        <div style="font-size:11px;color:${col};margin-top:6px;font-weight:600">${label}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">KM/L • ${fills.length} fills</div>
+      </div>`;
+    }).filter(Boolean).join('');
+  }
+
+  // 5. Month summary for insights page
+  const summaryEl=document.getElementById('insights-month-summary');
+  if(summaryEl){
+    const now=new Date();
+    const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const mFuel=fuelLogs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
+    const mSvc=serviceLogs.filter(s=>s.date&&s.date.startsWith(ym));
+    const totalKm=cars.reduce((a,c)=>a+getTrueOdo(c.id)-(c.odoAtPurchase!==null?parseFloat(c.odoAtPurchase||0):0),0);
+    summaryEl.innerHTML=[
+      {label:'Fuel Spend',val:'₨'+fmtPKR(mFuel.reduce((a,b)=>a+(parseFloat(b.cost)||0),0)),sub:'this month',accent:'var(--gold)'},
+      {label:'Litres Consumed',val:mFuel.reduce((a,b)=>a+(parseFloat(b.litres)||0),0).toFixed(1)+' L',sub:'this month',accent:'var(--blue)'},
+      {label:'Service Cost',val:'₨'+fmtPKR(mSvc.reduce((a,b)=>a+(parseFloat(b.cost)||0),0)),sub:'this month',accent:'var(--purple)'},
+      {label:'Total KM (All Cars)',val:fmtKM(Math.round(totalKm))+' KM',sub:'since purchase',accent:'var(--green)'},
+      {label:'Fill-ups This Month',val:mFuel.length,sub:'across all cars',accent:'var(--amber)'},
+    ].map(m=>`<div class="metric" style="--accent:${m.accent}"><div class="m-label">${m.label}</div><div class="m-val" style="color:${m.accent};font-size:20px">${m.val}</div><div class="m-sub">${m.sub}</div></div>`).join('');
+  }
+}
+
+function renderCharts(){
+  renderMOMChart();
+  renderInsightCharts();
+  const d=chartDefaults();
+  const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{family:'DM Mono',size:10}},grid:{color:d.gridColor}}}};
+
+  // Economy trend - respect car filter
+  const filteredForCharts=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  const fullFills=filteredForCharts.filter(f=>f.fillType==='full'&&f.kmpl>0).slice(-12).reverse();
+  mkChart('chart-economy',{type:'line',data:{labels:fullFills.map(f=>f.date.slice(5)),datasets:[{label:'KM/L',data:fullFills.map(f=>f.kmpl),borderColor:'#e8c44a',backgroundColor:'rgba(232,196,74,0.1)',tension:0.3,fill:true,pointRadius:3}]},options:{...baseOpts,plugins:{...baseOpts.plugins}}});
+
+  // Monthly fuel spend - respect car filter
+  const months={};
+  filteredForCharts.forEach(f=>{if(!f.date)return;const m=f.date.slice(0,7);months[m]=(months[m]||0)+(parseFloat(f.cost)||0);});
+  const mKeys=Object.keys(months).sort().slice(-8);
+  mkChart('chart-monthly',{type:'bar',data:{labels:mKeys.map(m=>m.slice(5)+'/'+m.slice(2,4)),datasets:[{label:'PKR',data:mKeys.map(m=>months[m]),backgroundColor:'rgba(96,165,250,0.7)',borderRadius:4}]},options:baseOpts});
+
+  // Fuel log charts
+  // Fuel trend - split by car if filter active
+  const fuelPageFills=dashCarId?fullFills:fullFills;
+  const ron92Fills=fuelPageFills.filter(f=>f.fuelType==='RON-92');
+  const ron95Fills=fuelPageFills.filter(f=>f.fuelType==='RON-95');
+  const allFillDates=[...new Set(fuelPageFills.map(f=>f.date.slice(5)))].sort();
+  mkChart('chart-fuel-trend',{type:'line',data:{labels:fuelPageFills.map(f=>f.date.slice(5)),datasets:[
+    {label:'KM/L (Full fills)',data:fuelPageFills.map(f=>f.fillType==='full'?f.kmpl:null),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,0.1)',tension:0.3,fill:true,pointRadius:3},
+  ]},options:{...baseOpts}});
+  // Fuel cost chart split by fuel type
+  const fuelMonths92={};const fuelMonths95={};
+  const filtFL=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
+  filtFL.forEach(f=>{
+    if(!f.date)return;
+    const m=f.date.slice(0,7);
+    if(f.fuelType==='RON-92')fuelMonths92[m]=(fuelMonths92[m]||0)+(parseFloat(f.cost)||0);
+    else if(f.fuelType==='RON-95')fuelMonths95[m]=(fuelMonths95[m]||0)+(parseFloat(f.cost)||0);
+  });
+  mkChart('chart-fuel-cost',{type:'bar',data:{labels:mKeys.map(m=>m.slice(5)+'/'+m.slice(2,4)),datasets:[
+    {label:'RON-92 (PKR)',data:mKeys.map(m=>fuelMonths92[m]||0),backgroundColor:'rgba(232,196,74,0.75)',borderRadius:4},
+    {label:'RON-95 (PKR)',data:mKeys.map(m=>fuelMonths95[m]||0),backgroundColor:'rgba(96,165,250,0.75)',borderRadius:4},
+  ]},options:baseOpts});
+
+  // P&L chart
+  const soldCars=cars.filter(c=>c.status==='sold'&&c.boughtAt&&c.soldAt);
+  mkChart('chart-pl',{type:'bar',data:{labels:soldCars.map(c=>`${c.make} ${c.model}`),datasets:[{label:'Bought (PKR)',data:soldCars.map(c=>parseFloat(c.boughtAt||0)),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4},{label:'Sold (PKR)',data:soldCars.map(c=>parseFloat(c.soldAt||0)),backgroundColor:'rgba(74,222,128,0.7)',borderRadius:4}]},options:baseOpts});
+
+  // Service cost per car
+  const svcCosts=cars.map(c=>({name:`${c.make} ${c.model}`,cost:serviceLogs.filter(s=>s.carId===c.id).reduce((a,b)=>a+(parseFloat(b.cost)||0),0)})).filter(x=>x.cost>0);
+  mkChart('chart-svc-cost',{type:'doughnut',data:{labels:svcCosts.map(x=>x.name),datasets:[{data:svcCosts.map(x=>x.cost),backgroundColor:COLORS.slice(0,svcCosts.length)}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'right',labels:{color:d.textColor,font:{family:'DM Mono',size:11}}}}}});
+}
+
+function renderFuelPriceChart(){
+  const d=chartDefaults();
+  let data=[...fuelPrices].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const from=document.getElementById('fp-from')?.value;
+  const to=document.getElementById('fp-to')?.value;
+  if(from)data=data.filter(p=>p.date>=from);
+  if(to)data=data.filter(p=>p.date<=to);
+  mkChart('chart-fp',{type:'line',data:{labels:data.map(p=>p.date),datasets:[
+    {label:'RON-92 (PKR/L)',data:data.map(p=>p.ron92||null),borderColor:'#e8c44a',backgroundColor:'rgba(232,196,74,0.1)',tension:0.3,pointRadius:4,pointBackgroundColor:'#e8c44a',borderWidth:2.5,fill:true},
+    {label:'RON-95 (PKR/L)',data:data.map(p=>p.ron95||null),borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.1)',tension:0.3,pointRadius:4,pointBackgroundColor:'#60a5fa',borderWidth:2.5,fill:true},
+    {label:'HSD (PKR/L)',data:data.map(p=>p.hsd||null),borderColor:'#4ade80',tension:0.3,pointRadius:3,borderWidth:1.5,fill:false,borderDash:[4,4]},
+    {label:'CNG (PKR/kg)',data:data.map(p=>p.cng||null),borderColor:'#f87171',tension:0.3,pointRadius:3,borderWidth:1.5,fill:false,borderDash:[4,4]},
+  ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:d.textColor,font:{size:11}}}},scales:{x:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}},y:{ticks:{color:d.textColor,font:{size:10}},grid:{color:d.gridColor}}}}});
+}
+window.renderFuelPriceChart=renderFuelPriceChart;
+
+// ── MODALS ────────────────────────────────────────────────────────
+window.showModal=function(type,data={}){
+  if(typeof data==='object'&&data!==null&&data.target)data={};
+  const overlay=document.getElementById('modal-overlay');
+  const modal=document.getElementById('active-modal');
+  let html='';
+
+  if(type==='car'){
+    const isEdit=data&&data.id;
+    html=`<div class="modal-head"><h2>${isEdit?'Edit Car':'Add New Car'}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-section">🚗 Car Details</div>
+      <div class="form-group"><label>Make</label><div class="ac-wrap"><input id="f-make" placeholder="Toyota, Honda…" value="${data.make||''}" oninput="acShow('f-make',getMakes())"/><div class="ac-list" id="ac-f-make"></div></div></div>
+      <div class="form-group"><label>Model</label><input id="f-model" placeholder="Corolla, Civic…" value="${data.model||''}"/></div>
+      <div class="form-group"><label>Year</label><input id="f-year" type="number" placeholder="2020" value="${data.year||''}"/></div>
+      <div class="form-group"><label>Variant</label><input id="f-variant" placeholder="GLi, Oriel…" value="${data.variant||''}"/></div>
+      <div class="form-group"><label>Registration No.</label><input id="f-reg" placeholder="LHR-2024-1234" value="${data.reg||''}"/></div>
+      <div class="form-group"><label>Colour</label><input id="f-color" placeholder="White, Silver…" value="${data.color||''}"/></div>
+      <div class="form-group"><label>Fuel Type</label>
+        <select id="f-ftype"><option ${(data.fuelType||'')==='RON-92'?'selected':''}>RON-92</option><option ${(data.fuelType||'')==='RON-95'?'selected':''}>RON-95</option><option ${(data.fuelType||'')==='HSD'?'selected':''}>HSD</option><option ${(data.fuelType||'')==='CNG'?'selected':''}>CNG</option></select>
+      </div>
+      <div class="form-group"><label>Token Renewal Date</label><input id="f-token" type="date" value="${data.tokenDate||''}"/></div>
+      <div class="form-divider"></div>
+      <div class="form-section">📍 Odometer</div>
+      <div class="form-group"><label>Odometer at Purchase (KM)</label><input id="f-odo-purchase" type="number" placeholder="0 if brand new" value="${data.odoAtPurchase!==undefined&&data.odoAtPurchase!==null?data.odoAtPurchase:''}"/><span class="input-hint">KM reading when you bought it (enter 0 if brand new)</span></div>
+      <div class="form-group"><label>Current Odometer (KM)</label><input id="f-odo" type="number" placeholder="3200" value="${data.odometer!==undefined&&data.odometer!==null?data.odometer:''}"/><span class="input-hint">What it shows on dashboard today</span></div>
+      <div class="form-divider"></div>
+      <div class="form-section">💰 Purchase Finance</div>
+      <div class="form-group"><label>Purchase Date</label><input id="f-pdate" type="date" value="${data.purchaseDate||''}"/></div>
+      <div class="form-group"><label>Purchase Price (PKR)</label><input id="f-bought" type="number" placeholder="3500000" value="${data.boughtAt||''}"/></div>
+      <div class="checkbox-row"><input type="checkbox" id="f-install" ${data.hasInstallment?'checked':''}/><label for="f-install">Purchased on installment / loan?</label></div>
+      <div class="form-group"><label>Down Payment (PKR)</label><input id="f-down" type="number" placeholder="1000000" value="${data.downPayment||''}"/></div>
+      <div class="form-group"><label>Loan Amount (PKR)</label><input id="f-loan" type="number" placeholder="2500000" value="${data.loanAmount||''}"/></div>
+      <div class="form-group"><label>Monthly EMI (PKR)</label><input id="f-emi" type="number" placeholder="42000" value="${data.monthlyEMI||''}"/></div>
+      <div class="form-group"><label>Months Remaining</label><input id="f-months" type="number" placeholder="24" value="${data.monthsLeft||''}"/></div>
+      <div class="form-group"><label>EMI Due Date</label><input id="f-emi-date" placeholder="5th of every month" value="${data.emiDate||''}"/></div>
+    </div></div>
+    <div class="modal-footer">
+      ${isEdit?`<button class="btn btn-danger btn-sm" onclick="deleteCar('${data.id}')"><i class="ti ti-trash"></i>Delete</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCar('${data.id||''}')"><i class="ti ti-device-floppy"></i>Save Car</button>
+    </div>`;
+  }
+
+  else if(type==='fuel'){resetFuelFields();
+    html=`<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Car</label>
+        <select id="f-car-id">${cars.filter(c=>c.status!=='sold').map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Fill Type</label>
+        <select id="f-fill-type" onchange="onFillTypeChange()">
+          <option value="full" ${(data.fillType||'full')==='full'?'selected':''}>⛽ Full Tank</option>
+          <option value="partial" ${data.fillType==='partial'?'selected':''}>🔸 Partial Fill</option>
+          <option value="missed" ${data.fillType==='missed'?'selected':''}>⚠️ Missed (Checkpoint)</option>
+        </select>
+      </div>
+      <div id="f-missed-note" style="display:none;grid-column:1/-1;background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--amber)">
+        <strong>Missed checkpoint</strong> — Only odometer is recorded. KM/L will not be calculated. This keeps your next fill-up accurate by marking the gap.
+      </div>
+      <div id="f-fuel-main" style="display:contents">
+        <div class="form-group"><label>Fuel Station</label><div class="ac-wrap"><input id="f-station" placeholder="PSO, Shell, Total…" value="${data.station||''}" oninput="acShow('f-station',getStations())"/><div class="ac-list" id="ac-f-station"></div></div></div>
+        <div class="form-group"><label>Fuel Type</label>
+          <select id="f-ftype2"><option ${(data.fuelType||'')=='RON-92'?'selected':''}>RON-92</option><option ${data.fuelType==='RON-95'?'selected':''}>RON-95</option><option ${data.fuelType==='HSD'?'selected':''}>HSD</option><option ${data.fuelType==='CNG'?'selected':''}>CNG</option></select>
+        </div>
+        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="e.g. 299.48" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')"/></div>
+        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="e.g. 40.5" value="${data.litres||''}" oninput="autoFuel('litres')"/></div>
+        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="e.g. 9940" value="${data.cost||''}" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
+        <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" value="${data.distance||''}" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
+      </div>
+      <div class="form-group span-2">
+        <label>Odometer Now (KM)</label>
+        <input id="f-odo2" type="number" placeholder="48320" value="${data.odometer||''}" oninput="autoCalcDistance()"/>
+        <span class="input-hint" id="f-odo2-hint">Enter current odometer — distance since last fill-up will auto-calculate</span>
+      </div>
+      <div id="kmpl-preview" style="display:none;grid-column:1/-1">
+        <div style="background:var(--green-bg);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--green)">
+          ✅ Calculated KM/L: <strong id="kmpl-val">—</strong>
+        </div>
+      </div>
+    </div></div>
+    <div class="modal-footer">${data&&data.id?`<button class="btn btn-danger btn-sm" onclick="deleteFuel('${data.id}')"><i class="ti ti-trash"></i>Delete</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveFuel('${data&&data.id?data.id:''}')"><i class="ti ti-device-floppy"></i>${data&&data.id?'Update':'Save'}</button></div>`;
+  }
+
+  else if(type==='service'){
+    const isEdit=data&&data.id;
+    const svcOptions=svcTypes.map(t=>`<option value="${t}" ${data.type===t?'selected':''}>${t}</option>`).join('');
+    html=`<div class="modal-head"><h2>${isEdit?'Edit Service Record':'Log Service'}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Car</label>
+        <select id="f-car-id" onchange="syncNextDueBase()">${cars.map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${data.date||new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Service Type</label><select id="f-stype" onchange="checkSvcTypeSelect(this)">${svcOptions}<option disabled>──────────────</option><option value="__manage__">⚙️ Add / Remove Service Types...</option></select><span class="input-hint">Select a service or manage your list at the bottom</span></div>
+      <div class="form-group"><label>Cost (PKR)</label><input id="f-cost" type="number" placeholder="8500" value="${data.cost||''}"/></div>
+      <div class="form-group"><label>Odometer at Service (KM)</label><input id="f-odo3" type="number" placeholder="48000" value="${data.odometer||''}" oninput="syncNextDueBase()"/></div>
+      <div class="form-group span-2"><label>Service Station / Location</label><div class="ac-wrap"><input id="f-svc-station" placeholder="Al-Hafeez Workshop, Filter House…" value="${data.station||''}" oninput="acShow('f-svc-station',getSvcStations())"/><div class="ac-list" id="ac-f-svc-station"></div></div></div>
+      <div class="form-group span-2">
+        <label>Next Due Odometer (KM)</label>
+        <div style="position:relative">
+          <input id="f-next-odo" placeholder="e.g. 39,218  or  34218 + 5000" value="${data.nextDueOdo||''}" oninput="calcNextDue()" onkeydown="if(event.key==='Enter'){event.preventDefault();fillNextDue();}" style="padding-right:140px"/>
+          <div id="f-next-odo-ghost" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--green);opacity:0.85;pointer-events:none;white-space:nowrap">
+            = <span id="f-next-odo-calc"></span> KM
+          </div>
+        </div>
+        <span class="input-hint" id="f-next-odo-hint">Type a number, or an expression like 34218 + 5000. Press Enter to confirm.</span>
+      </div>
+      <div class="form-group span-2"><label>Notes</label><textarea id="f-notes" rows="2" placeholder="Parts used, observations…">${data.notes||''}</textarea></div>
+      <div class="form-group span-2"><label>Receipt Photo (optional)</label>
+        ${data.receiptUrl?`<div style="margin-bottom:8px"><a href="${data.receiptUrl}" target="_blank" style="color:var(--blue);font-size:13px"><i class="ti ti-photo"></i> View existing receipt</a></div>`:''}
+        <input type="file" id="f-receipt" accept="image/*" style="padding:6px"/>
+      </div>
+    </div></div>
+    <div class="modal-footer">
+      ${isEdit?`<button class="btn btn-danger btn-sm" onclick="deleteService('${data.id}')"><i class="ti ti-trash"></i>Delete</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveService('${data.id||''}')"><i class="ti ti-device-floppy"></i>${isEdit?'Update':'Save'}</button>
+    </div>`;
+  }
+
+  else if(type==='odo'){
+    const car=cars.find(c=>c.id===data.carId);
+    html=`<div class="modal-head"><h2>Update Odometer — ${car?car.make+' '+car.model:''}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid cols-1">
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:13px;color:var(--text2);font-family:var(--mono)">Current: <strong style="color:var(--text);font-size:16px">${car?parseFloat(car.odometer||0).toLocaleString():0} KM</strong></div>
+      <div class="form-group"><label>New Odometer Reading (KM)</label><input id="f-new-odo" type="number" placeholder="${car?parseFloat(car.odometer||0)+500:0}"/><span class="input-hint">Enter the current reading from your dashboard</span></div>
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveOdo('${data.carId}')"><i class="ti ti-check"></i>Update</button></div>`;
+  }
+
+  else if(type==='sell'){
+    const car=cars.find(c=>c.id===data.carId);
+    html=`<div class="modal-head"><h2>Mark as Sold — ${car?car.make+' '+car.model:''}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid cols-1">
+      <div class="form-group"><label>Sale Date</label><input id="f-sell-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>Sold For (PKR)</label><input id="f-sold-at" type="number" placeholder="4200000"/></div>
+      <div class="form-group"><label>Notes</label><textarea id="f-sell-notes" rows="2" placeholder="Sold to whom, any details…"></textarea></div>
+      ${car?`<div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:13px;color:var(--text2)">Bought for: <strong style="color:var(--text)">₨${fmtPKR(car.boughtAt||0)}</strong></div>`:''}
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmSold('${data.carId}')"><i class="ti ti-tag"></i>Confirm Sale</button></div>`;
+  }
+
+  else if(type==='fuel-price'){
+    html=`<div class="modal-head"><h2>Update Fuel Prices</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="form-group span-2"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
+      <div class="form-group"><label>RON-92 (PKR/L)</label><input id="f-ron92" type="number" step="0.01" placeholder="248.74"/></div>
+      <div class="form-group"><label>RON-95 (PKR/L)</label><input id="f-ron95" type="number" step="0.01" placeholder="258.40"/></div>
+      <div class="form-group"><label>HSD Diesel (PKR/L)</label><input id="f-hsd" type="number" step="0.01" placeholder="252.30"/></div>
+      <div class="form-group"><label>CNG (PKR/kg)</label><input id="f-cng" type="number" step="0.01" placeholder="135.00"/></div>
+      <div class="form-group span-2"><label>Source</label><input id="f-source" placeholder="OGRA, Manual…" value="Manual"/></div>
+    </div></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveFuelPrice()"><i class="ti ti-device-floppy"></i>Save</button></div>`;
+  }
+
+  modal.innerHTML=html;
+  overlay.classList.add('open');
+
+}
+
+window.closeModal=function(){document.getElementById('modal-overlay').classList.remove('open');}
+document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
+
+// ── SAVE FUNCTIONS ────────────────────────────────────────────────
+window.saveCar=async function(editId=''){
+  const data={
+    make:v('f-make'),model:v('f-model'),year:v('f-year'),variant:v('f-variant'),
+    reg:v('f-reg'),color:v('f-color'),fuelType:v('f-ftype'),tokenDate:v('f-token'),
+    odoAtPurchase:document.getElementById('f-odo-purchase').value!==''?parseFloat(document.getElementById('f-odo-purchase').value):null,odometer:n('f-odo'),
+    purchaseDate:v('f-pdate'),boughtAt:n('f-bought'),
+    hasInstallment:document.getElementById('f-install')?.checked||false,
+    downPayment:n('f-down'),loanAmount:n('f-loan'),monthlyEMI:n('f-emi'),
+    monthsLeft:n('f-months'),emiDate:v('f-emi-date'),status:'owned',
+  };
+  if(!data.make||!data.model){showToast('Make and model required','error');return;}
+  if(editId)await updateRec('cars',editId,data);
+  else await addRec('cars',data);
+  closeModal();showToast(editId?'Car updated!':'Car added!');
+}
+
+window.deleteCar=async function(id){
+  if(!confirm('Delete this car and all its records?'))return;
+  await deleteRec('cars',id);
+  closeModal();showToast('Car deleted');
+}
+
+window.saveFuel=async function(editId=''){
+  const carId=v('f-car-id');
+  if(!carId){showToast('Select a car','error');return;}
+  const fillType=v('f-fill-type');
+  const odo=n('f-odo2');
+  const date=v('f-date');
+
+  // Handle missed checkpoint
+  if(fillType==='missed'){
+    if(!odo){showToast('Enter current odometer for checkpoint','error');return;}
+    await addRec('fuelLogs',{carId,date,fillType:'missed',odometer:odo,litres:0,cost:0,kmpl:0,station:'',fuelType:'',isMissed:true});
+    if(odo)await updateRec('cars',carId,{odometer:odo});
+    closeModal();showToast('Missed checkpoint saved — odometer updated.');
+    return;
+  }
+
+  const litres=n('f-litres');const dist=n('f-dist');
+  const kmpl=litres&&dist?(dist/litres):0;
+  const cost=n('f-cost');
+  const ppl=litres&&cost?parseFloat((cost/litres).toFixed(2)):0;
+  const ftype=v('f-ftype2');
+
+  const fuelData={carId,date,fillType,station:v('f-station'),fuelType:ftype,litres,cost,odometer:odo,distance:dist,kmpl:parseFloat(kmpl.toFixed(2))};
+  if(editId)await updateRec('fuelLogs',editId,fuelData);
+  else await addRec('fuelLogs',fuelData);
+  if(odo)await updateRec('cars',carId,{odometer:odo});
+
+  // Auto log fuel price
+  if(ppl>0){
+    const priceEntry={date,source:'Auto (fill-up)'};
+    if(ftype==='RON-92')priceEntry.ron92=ppl;
+    else if(ftype==='RON-95')priceEntry.ron95=ppl;
+    else if(ftype==='HSD')priceEntry.hsd=ppl;
+    else if(ftype==='CNG')priceEntry.cng=ppl;
+    await addRec('fuelPrices',priceEntry);
+  }
+  closeModal();showToast(editId?(fillType==='full'?'Fill-up updated!':'Record updated!'):(fillType==='full'?'Full fill logged! KM/L calculated.':'Partial fill logged (estimate only).'));
+}
+
+window.editFuel=function(id){
+  const f=fuelLogs.find(x=>x.id===id);
+  if(!f)return;
+  showModal('fuel',f);
+}
+window.deleteFuel=async function(id){
+  if(!confirm('Delete this fuel record?'))return;
+  await deleteRec('fuelLogs',id);
+  showToast('Fuel record deleted');
+}
+window.editService=function(id){
+  const s=serviceLogs.find(x=>x.id===id);
+  if(!s)return;
+  showModal('service',s);
+}
+window.deleteService=async function(id){
+  if(!confirm('Delete this service record?'))return;
+  await deleteRec('serviceLogs',id);
+  showToast('Service record deleted');
+}
+window.saveOdo=async function(carId){
+  const newOdo=n('f-new-odo');
+  if(!newOdo){showToast('Enter odometer reading','error');return;}
+  const car=cars.find(c=>c.id===carId);
+  if(car&&newOdo<parseFloat(car.odometer||0)){showToast('New reading cannot be less than current','error');return;}
+  await updateRec('cars',carId,{odometer:newOdo});
+  closeModal();showToast('Odometer updated! Service progress recalculated.');
+}
+
+window.saveService=async function(editId=''){
+  const carId=v('f-car-id');
+  if(!carId){showToast('Select a car','error');return;}
+  const receiptFile=document.getElementById('f-receipt')?.files[0];
+  let receiptUrl=null;
+  if(receiptFile&&storage){
+    showToast('Uploading receipt…','warning');
+    receiptUrl=await uploadPhoto(receiptFile,`receipts/${carId}_${Date.now()}`);
+  }
+  const odo=n('f-odo3');
+  // Handle +interval next due
+  const nextDueRaw=document.getElementById('f-next-odo')?.value?.trim()||'';
+  // Get next due — use computed value if expression was typed, else raw value
+  const nextDueEl=document.getElementById('f-next-odo');
+  const computedVal=nextDueEl?.dataset.computed;
+  let nextDueOdo=0;
+  if(computedVal&&parseFloat(computedVal)>0){
+    nextDueOdo=parseFloat(computedVal);
+  } else {
+    nextDueOdo=parseFloat(nextDueRaw)||0;
+  }
+  const svcData={carId,date:v('f-date'),type:v('f-stype'),cost:n('f-cost'),odometer:odo,nextDueOdo,station:v('f-svc-station'),notes:v('f-notes'),status:'ok'};
+  if(receiptUrl)svcData.receiptUrl=receiptUrl;
+  if(editId){
+    await updateRec('serviceLogs',editId,svcData);
+  } else {
+    await addRec('serviceLogs',svcData);
+  }
+  if(odo)await updateRec('cars',carId,{odometer:odo});
+  closeModal();showToast(editId?'Service updated!':'Service logged!');
+}
+
+window.saveFuelPrice=async function(){
+  const date=v('f-date');if(!date){showToast('Date required','error');return;}
+  await addRec('fuelPrices',{date,ron92:n('f-ron92'),ron95:n('f-ron95'),hsd:n('f-hsd'),cng:n('f-cng'),source:v('f-source')});
+  closeModal();showToast('Fuel prices updated!');
+}
+
+window.confirmSold=async function(carId){
+  const soldAt=n('f-sold-at');if(!soldAt){showToast('Enter sale price','error');return;}
+  await updateRec('cars',carId,{status:'sold',soldAt,sellDate:v('f-sell-date'),sellNotes:v('f-sell-notes')});
+  closeModal();showToast('Car marked as sold!');
+}
+
+window.openCarDetail=function(id){
+  const car=cars.find(c=>c.id===id);if(car)showModal('car',car);
+}
+
+// ── AUTOCOMPLETE ──────────────────────────────────────────────────
+function getMakes(){return[...new Set(cars.map(c=>c.make).filter(Boolean)),'Toyota','Honda','Suzuki','Kia','Hyundai','Daihatsu','Changan','MG','Haval','DFSK'];}
+function getStations(){return[...new Set(fuelLogs.map(f=>f.station).filter(Boolean))];}
+window.acShow=function(inputId,list){
+  const inp=document.getElementById(inputId);
+  const acList=document.getElementById('ac-'+inputId);
+  if(!inp||!acList)return;
+  const val=inp.value.toLowerCase();
+  const filtered=list.filter(s=>s.toLowerCase().includes(val)&&s.toLowerCase()!==val).slice(0,6);
+  if(!filtered.length){acList.classList.remove('open');return;}
+  acList.innerHTML=filtered.map(s=>`<div class="ac-item" onclick="acSelect('${inputId}','${s}')">${s}</div>`).join('');
+  acList.classList.add('open');
+}
+window.acSelect=function(inputId,val){
+  const inp=document.getElementById(inputId);
+  if(inp)inp.value=val;
+  const acList=document.getElementById('ac-'+inputId);
+  if(acList)acList.classList.remove('open');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))document.querySelectorAll('.ac-list').forEach(l=>l.classList.remove('open'));});
+
+// ── AUTO FUEL CALC (any 2 of rate/litres/cost fills 3rd) ─────────
+// Track which fields the user has actively typed in
+// ── AUTO DISTANCE FROM LAST FUEL LOG ─────────────────────────────
+window.autoCalcDistance=function(){
+  const odoEl=document.getElementById('f-odo2');
+  const distEl=document.getElementById('f-dist');
+  const hintEl=document.getElementById('f-odo2-hint');
+  if(!odoEl||!distEl)return;
+  const currentOdo=parseFloat(odoEl.value)||0;
+  if(!currentOdo){calcKmpl();return;}
+  // Get selected car
+  const carId=document.getElementById('f-car-id')?.value;
+  if(!carId){calcKmpl();return;}
+  // Find last fuel log for this car (excluding missed, sorted by odometer desc)
+  const lastFuel=fuelLogs
+    .filter(f=>f.carId===carId&&!f.isMissed&&f.fillType!=='missed'&&parseFloat(f.odometer||0)>0)
+    .sort((a,b)=>parseFloat(b.odometer||0)-parseFloat(a.odometer||0))[0];
+  if(lastFuel){
+    const lastOdo=parseFloat(lastFuel.odometer||0);
+    const dist=currentOdo-lastOdo;
+    if(dist>0){
+      distEl.value=dist;
+      if(hintEl)hintEl.textContent='Distance auto-calculated from last fill-up on '+lastFuel.date+' ('+lastOdo.toLocaleString()+' KM)';
+    } else if(dist<=0){
+      if(hintEl)hintEl.textContent='⚠️ Odometer must be higher than last fill-up ('+lastOdo.toLocaleString()+' KM)';
+    }
+  } else {
+    if(hintEl)hintEl.textContent='No previous fill-up found — enter distance manually';
+  }
+  calcKmpl();
+}
+
+// ── FUEL AUTO CALC ───────────────────────────────────────────────
+// Simple rule: find the ONE empty field and calculate it.
+// The field being typed is never empty, so it is never overwritten.
+
+window.autoFuel=function(changed){
+  const rEl=document.getElementById('f-rate');
+  const lEl=document.getElementById('f-litres');
+  const cEl=document.getElementById('f-cost');
+  if(!rEl||!lEl||!cEl)return;
+
+  const rEmpty=rEl.value.trim()==='';
+  const lEmpty=lEl.value.trim()==='';
+  const cEmpty=cEl.value.trim()==='';
+
+  const r=parseFloat(rEl.value)||0;
+  const l=parseFloat(lEl.value)||0;
+  const c=parseFloat(cEl.value)||0;
+
+  // Exactly one field empty → calculate it
+  if(rEmpty && !lEmpty && !cEmpty){
+    // rate is empty → rate = cost / litres
+    if(l>0&&c>0) rEl.value=(c/l).toFixed(2);
+  }
+  else if(lEmpty && !rEmpty && !cEmpty){
+    // litres is empty → litres = cost / rate
+    if(r>0&&c>0) lEl.value=(c/r).toFixed(2);
+  }
+  else if(cEmpty && !rEmpty && !lEmpty){
+    // cost is empty → cost = rate × litres
+    if(r>0&&l>0) cEl.value=(r*l).toFixed(0);
+  }
+  // All three filled: user edited one → recalculate cost (safest)
+  else if(!rEmpty&&!lEmpty&&!cEmpty){
+    if(changed==='rate'||changed==='litres'){
+      if(r>0&&l>0) cEl.value=(r*l).toFixed(0);
+    } else if(changed==='cost'){
+      if(c>0&&l>0) rEl.value=(c/l).toFixed(2);
+    }
+  }
+  calcKmpl();
+}
+
+
 
 window.onFillTypeChange=function(){
   const type=document.getElementById('f-fill-type')?.value;
