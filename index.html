@@ -2033,7 +2033,7 @@ window.showModal=function(type,data={}){
     </div>`;
   }
 
-  else if(type==='fuel'){resetFuelFields();
+  else if(type==='fuel'){
     html=`<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
       <div class="form-group span-2"><label>Car</label>
@@ -2147,6 +2147,8 @@ window.showModal=function(type,data={}){
 
   modal.innerHTML=html;
   overlay.classList.add('open');
+  // Reset fuel fields after modal renders
+  if(type==='fuel')setTimeout(resetFuelFields,10);
 
 }
 
@@ -4697,47 +4699,6 @@ window.showModal=function(type,data={}){
     </div>`;
   }
 
-  else if(type==='fuel'){resetFuelFields();
-    html=`<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body"><div class="form-grid">
-      <div class="form-group span-2"><label>Car</label>
-        <select id="f-car-id">${cars.filter(c=>c.status!=='sold').map(c=>`<option value="${c.id}" ${data.carId===c.id?'selected':''}>${c.make} ${c.model} ${c.year||''}</option>`).join('')}</select>
-      </div>
-      <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
-      <div class="form-group"><label>Fill Type</label>
-        <select id="f-fill-type" onchange="onFillTypeChange()">
-          <option value="full" ${(data.fillType||'full')==='full'?'selected':''}>⛽ Full Tank</option>
-          <option value="partial" ${data.fillType==='partial'?'selected':''}>🔸 Partial Fill</option>
-          <option value="missed" ${data.fillType==='missed'?'selected':''}>⚠️ Missed (Checkpoint)</option>
-        </select>
-      </div>
-      <div id="f-missed-note" style="display:none;grid-column:1/-1;background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--amber)">
-        <strong>Missed checkpoint</strong> — Only odometer is recorded. KM/L will not be calculated. This keeps your next fill-up accurate by marking the gap.
-      </div>
-      <div id="f-fuel-main" style="display:contents">
-        <div class="form-group"><label>Fuel Station</label><div class="ac-wrap"><input id="f-station" placeholder="PSO, Shell, Total…" value="${data.station||''}" oninput="acShow('f-station',getStations())"/><div class="ac-list" id="ac-f-station"></div></div></div>
-        <div class="form-group"><label>Fuel Type</label>
-          <select id="f-ftype2"><option ${(data.fuelType||'')=='RON-92'?'selected':''}>RON-92</option><option ${data.fuelType==='RON-95'?'selected':''}>RON-95</option><option ${data.fuelType==='HSD'?'selected':''}>HSD</option><option ${data.fuelType==='CNG'?'selected':''}>CNG</option></select>
-        </div>
-        <div class="form-group"><label>Fuel Rate (PKR/Litre)</label><input id="f-rate" type="number" step="0.01" placeholder="e.g. 299.48" value="${data.cost&&data.litres?(parseFloat(data.cost)/parseFloat(data.litres)).toFixed(2):''}" oninput="autoFuel('rate')"/></div>
-        <div class="form-group"><label>Litres Filled</label><input id="f-litres" type="number" step="0.1" placeholder="e.g. 40.5" value="${data.litres||''}" oninput="autoFuel('litres')"/></div>
-        <div class="form-group span-2"><label>Total Cost (PKR)</label><input id="f-cost" type="number" placeholder="e.g. 9940" value="${data.cost||''}" oninput="autoFuel('cost')"/><span class="input-hint">Enter any 2 of Rate / Litres / Cost — 3rd field calculates automatically</span></div>
-        <div class="form-group"><label>Distance Since Last Fill (KM)</label><input id="f-dist" type="number" placeholder="512" value="${data.distance||''}" oninput="calcKmpl()"/><span class="input-hint">Leave blank for partial fill</span></div>
-      </div>
-      <div class="form-group span-2">
-        <label>Odometer Now (KM)</label>
-        <input id="f-odo2" type="number" placeholder="48320" value="${data.odometer||''}" oninput="autoCalcDistance()"/>
-        <span class="input-hint" id="f-odo2-hint">Enter current odometer — distance since last fill-up will auto-calculate</span>
-      </div>
-      <div id="kmpl-preview" style="display:none;grid-column:1/-1">
-        <div style="background:var(--green-bg);border:1px solid rgba(74,222,128,0.3);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--green)">
-          ✅ Calculated KM/L: <strong id="kmpl-val">—</strong>
-        </div>
-      </div>
-    </div></div>
-    <div class="modal-footer">${data&&data.id?`<button class="btn btn-danger btn-sm" onclick="deleteFuel('${data.id}')"><i class="ti ti-trash"></i>Delete</button>`:''}<button class="btn btn-secondary" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveFuel('${data&&data.id?data.id:''}')"><i class="ti ti-device-floppy"></i>${data&&data.id?'Update':'Save'}</button></div>`;
-  }
-
   else if(type==='service'){
     const isEdit=data&&data.id;
     const svcOptions=svcTypes.map(t=>`<option value="${t}" ${data.type===t?'selected':''}>${t}</option>`).join('');
@@ -4811,6 +4772,8 @@ window.showModal=function(type,data={}){
 
   modal.innerHTML=html;
   overlay.classList.add('open');
+  // Reset fuel fields after modal renders
+  if(type==='fuel')setTimeout(resetFuelFields,10);
 
 }
 
