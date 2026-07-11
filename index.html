@@ -1997,7 +1997,7 @@ window.showModal=function(type,data={}){
     </div>`;
   }
 
-  else if(type==='fuel'){resetFuelFields();
+  else if(type==='fuel'){
     html=`<div class="modal-head"><h2>Log Fill-up</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="form-grid">
       <div class="form-group span-2"><label>Car</label>
@@ -2111,22 +2111,16 @@ window.showModal=function(type,data={}){
 
   modal.innerHTML=html;
   overlay.classList.add('open');
-  // For fuel edit: mark pre-filled fields as user-typed after render
-  if(type==='fuel'&&data&&data.id){
+  // For new fuel entry: clear fields after render
+  if(type==='fuel'){
     setTimeout(()=>{
-      if(data.cost&&data.litres){
-        const r=document.getElementById('f-rate');
-        if(r&&r.value)r.dataset.typed='yes';
+      if(!data||!data.id){
+        ['f-rate','f-litres','f-cost'].forEach(id=>{
+          const el=document.getElementById(id);
+          if(el)el.value='';
+        });
       }
-      if(data.litres){
-        const l=document.getElementById('f-litres');
-        if(l&&l.value)l.dataset.typed='yes';
-      }
-      if(data.cost){
-        const c=document.getElementById('f-cost');
-        if(c&&c.value)c.dataset.typed='yes';
-      }
-    },50);
+    },10);
   }
 }
 
