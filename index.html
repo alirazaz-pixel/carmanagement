@@ -1263,14 +1263,13 @@ function renderFuelLog(){
   function getPrevFuel(f){
     const logs=carLogs[f.carId]||[];
     const idx=logs.findIndex(x=>x.id===f.id);
-    // Find previous non-missed entry
     for(let i=idx-1;i>=0;i--){
-      if(!logs[i].isMissed&&logs[i].fillType!=='missed'&&parseFloat(logs[i].odometer||0)>0)return logs[i];
+      if(!logs[i].isMissed&&!logs[i].hasMissed&&logs[i].fillType!=='missed'&&parseFloat(logs[i].odometer||0)>0)return logs[i];
     }
     return null;
   }
   function getCalcDistance(f){
-    if(f.isMissed||f.fillType==='missed')return null;
+    if(f.isMissed||f.hasMissed||f.fillType==='missed')return null;
     if(f.distance&&parseFloat(f.distance)>0)return parseFloat(f.distance);
     const prev=getPrevFuel(f);
     if(!prev)return null;
@@ -1278,6 +1277,7 @@ function renderFuelLog(){
     return d>0?d:null;
   }
   function getCalcKmpl(f){
+    if(f.isMissed||f.hasMissed||f.fillType==='missed')return null;
     if(f.kmpl&&parseFloat(f.kmpl)>0)return parseFloat(f.kmpl);
     if(f.fillType!=='full')return null;
     const dist=getCalcDistance(f);
@@ -1292,15 +1292,35 @@ function renderFuelLog(){
         <button onclick="event.stopPropagation();editFuel('${f.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
         <button onclick="event.stopPropagation();deleteFuel('${f.id}')" style="background:var(--red-bg);border:1px solid rgba(248,113,113,0.2);border-radius:5px;color:var(--red);padding:3px 8px;cursor:pointer;font-size:11px"><i class="ti ti-trash" style="font-size:12px"></i></button>
       </td>`;
-    // Missed checkpoint row
-    if(f.isMissed||f.fillType==='missed'){
-      return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
+    // Missed/gap entries
+    if(f.isMissed||f.fillType==='missed'||f.hasMissed){
+      const isFullMissed=f.isMissed||f.fillType==='missed';
+      if(isFullMissed){
+        return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
+          <td class="mono">${f.date}</td>
+          <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+          <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
+          <td class="mono">${fmtKM(f.odometer)} KM</td>
+          <td>—</td>
+          <td><span class="badge" style="background:var(--amber-bg);color:var(--amber)">Missed</span></td>
+          ${actionBtns}
+        </tr>`;
+      }
+      // hasMissed partial/full fill - show data but mark gap
+      const pplM=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
+      return`<tr style="background:rgba(251,191,36,0.03)">
         <td class="mono">${f.date}</td>
         <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
-        <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
+        <td>${f.station||'—'}</td>
+        <td>${f.fuelType||'—'}</td>
+        <td class="mono">${f.litres} L</td>
+        <td class="mono">${pplM!=='—'?'₨'+pplM:'—'}</td>
+        <td class="gold mono">₨${fmt(f.cost)}</td>
         <td class="mono">${fmtKM(f.odometer)} KM</td>
-        <td>—</td>
-        <td><span class="badge" style="background:var(--amber-bg);color:var(--amber)">Missed</span></td>
+        <td class="amber mono" title="Gap — missed entries before this">⚠️ Gap</td>
+        <td class="mono" style="color:var(--text3)">—</td>
+        <td class="amber mono">—</td>
+        <td><span class="badge ${f.fillType==='full'?'full':'partial'}">${f.fillType==='full'?'Full':'Partial'}</span> <span style="font-size:10px;color:var(--amber)">gap</span></td>
         ${actionBtns}
       </tr>`;
     }
@@ -2005,14 +2025,17 @@ window.showModal=function(type,data={}){
       </div>
       <div class="form-group"><label>Date</label><input id="f-date" type="date" value="${new Date().toISOString().slice(0,10)}"/></div>
       <div class="form-group"><label>Fill Type</label>
-        <select id="f-fill-type" onchange="onFillTypeChange()">
+        <select id="f-fill-type">
           <option value="full" ${(data.fillType||'full')==='full'?'selected':''}>⛽ Full Tank</option>
           <option value="partial" ${data.fillType==='partial'?'selected':''}>🔸 Partial Fill</option>
-          <option value="missed" ${data.fillType==='missed'?'selected':''}>⚠️ Missed (Checkpoint)</option>
         </select>
       </div>
-      <div id="f-missed-note" style="display:none;grid-column:1/-1;background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--amber)">
-        <strong>Missed checkpoint</strong> — Only odometer is recorded. KM/L will not be calculated. This keeps your next fill-up accurate by marking the gap.
+      <div class="form-group span-2" style="flex-direction:row;align-items:flex-start;gap:10px;background:var(--bg3);border-radius:8px;padding:10px 14px">
+        <input type="checkbox" id="f-missed-check" ${data.hasMissed?'checked':''} style="width:16px;height:16px;accent-color:var(--amber);margin-top:2px;flex-shrink:0"/>
+        <div>
+          <label for="f-missed-check" style="text-transform:none;font-size:13px;color:var(--text);letter-spacing:0;font-family:var(--font);cursor:pointer;font-weight:500">I missed some entries before this fill-up</label>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">Distance &amp; KM/L will be skipped for this entry. Next full fill-up calculates correctly from today's odometer.</div>
+        </div>
       </div>
       <div id="f-fuel-main" style="display:contents">
         <div class="form-group"><label>Fuel Station</label><div class="ac-wrap"><input id="f-station" placeholder="PSO, Shell, Total…" value="${data.station||''}" oninput="acShow('f-station',getStations())"/><div class="ac-list" id="ac-f-station"></div></div></div>
@@ -2157,14 +2180,8 @@ window.saveFuel=async function(editId=''){
   const odo=n('f-odo2');
   const date=v('f-date');
 
-  // Handle missed checkpoint
-  if(fillType==='missed'){
-    if(!odo){showToast('Enter current odometer for checkpoint','error');return;}
-    await addRec('fuelLogs',{carId,date,fillType:'missed',odometer:odo,litres:0,cost:0,kmpl:0,station:'',fuelType:'',isMissed:true});
-    if(odo)await updateRec('cars',carId,{odometer:odo});
-    closeModal();showToast('Missed checkpoint saved — odometer updated.');
-    return;
-  }
+  // Check missed checkbox
+  const hasMissed=document.getElementById('f-missed-check')?.checked||false;
 
   const litres=n('f-litres');const dist=n('f-dist');
   const kmpl=litres&&dist?(dist/litres):0;
@@ -2172,7 +2189,10 @@ window.saveFuel=async function(editId=''){
   const ppl=litres&&cost?parseFloat((cost/litres).toFixed(2)):0;
   const ftype=v('f-ftype2');
 
-  const fuelData={carId,date,fillType,station:v('f-station'),fuelType:ftype,litres,cost,odometer:odo,distance:dist,kmpl:parseFloat(kmpl.toFixed(2))};
+  // If missed checkbox checked, skip distance and KM/L calculation
+  const effectiveKmpl=hasMissed?0:parseFloat(kmpl.toFixed(2));
+  const effectiveDist=hasMissed?0:dist;
+  const fuelData={carId,date,fillType,station:v('f-station'),fuelType:ftype,litres,cost,odometer:odo,distance:effectiveDist,kmpl:effectiveKmpl,hasMissed};
   if(editId)await updateRec('fuelLogs',editId,fuelData);
   else await addRec('fuelLogs',fuelData);
   if(odo)await updateRec('cars',carId,{odometer:odo});
@@ -2186,7 +2206,8 @@ window.saveFuel=async function(editId=''){
     else if(ftype==='CNG')priceEntry.cng=ppl;
     await addRec('fuelPrices',priceEntry);
   }
-  closeModal();showToast(editId?(fillType==='full'?'Fill-up updated!':'Record updated!'):(fillType==='full'?'Full fill logged! KM/L calculated.':'Partial fill logged (estimate only).'));
+  const missedNote=hasMissed?' (gap marked — KM/L skipped)':'';
+  closeModal();showToast(editId?'Record updated!':(fillType==='full'?'Full fill logged!'+missedNote:'Partial fill logged'+missedNote));
 }
 
 window.editFuel=function(id){
@@ -2311,20 +2332,7 @@ window.autoFuel=function(changed){
   }
   calcKmpl();
 }
-window.onFillTypeChange=function(){
-  const type=document.getElementById('f-fill-type')?.value;
-  const fuelMain=document.getElementById('f-fuel-main');
-  const missedNote=document.getElementById('f-missed-note');
-  const kmplPrev=document.getElementById('kmpl-preview');
-  if(type==='missed'){
-    if(fuelMain)fuelMain.style.display='none';
-    if(missedNote)missedNote.style.display='block';
-    if(kmplPrev)kmplPrev.style.display='none';
-  } else {
-    if(fuelMain)fuelMain.style.display='contents';
-    if(missedNote)missedNote.style.display='none';
-  }
-}
+// onFillTypeChange no longer needed - missed is now a checkbox
 
 // ── KM/L PREVIEW ──────────────────────────────────────────────────
 window.calcKmpl=function(){
