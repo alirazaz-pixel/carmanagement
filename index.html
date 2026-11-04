@@ -428,7 +428,7 @@ window.FIREBASE_CONFIG = {
         <div class="metric" style="--accent:var(--amber)"><div class="m-label"><i class="ti ti-gas-station"></i>RON-92 Price</div><div class="m-val amber" id="dm-petrol">—</div><div class="m-sub" id="dm-petrol-sub">per litre PKR</div></div>
         <div class="metric" style="--accent:var(--purple)"><div class="m-label"><i class="ti ti-calendar-month"></i>Monthly Cost</div><div class="m-val" id="dm-monthly" style="color:var(--purple)">—</div><div class="m-sub" id="dm-monthly-sub">fuel + service PKR</div></div>
         <div class="metric" style="--accent:var(--red)"><div class="m-label"><i class="ti ti-sun"></i>Daily Cost</div><div class="m-val" id="dm-daily" style="color:var(--red)">—</div><div class="m-sub" id="dm-daily-sub">PKR per day</div></div>
-        <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-road"></i>Avg KM/Day</div><div class="m-val blue" id="dm-kmday">—</div><div class="m-sub" id="dm-kmday-sub">based on odometer</div></div>
+        <div class="metric" style="--accent:var(--blue)"><div class="m-label"><i class="ti ti-road"></i>KM This Month</div><div class="m-val blue" id="dm-kmday">—</div><div class="m-sub" id="dm-kmday-sub">KM driven</div></div>
       </div>
       <div class="chart-grid">
         <div class="chart-panel"><div class="section-head"><h2>Fuel Economy Trend</h2></div><canvas id="chart-economy"></canvas></div>
@@ -1069,12 +1069,9 @@ function renderDashboard(){
     document.getElementById('dm-petrol-sub').textContent='updated '+l.date;
   }
 
-  // ── KM per day ──
-  const kmDay=calcKMperDay(filteredCars,filteredFuel);
+  // ── KM driven this month — element refs (calculated below after ym is defined) ──
   const kmDayEl=document.getElementById('dm-kmday');
   const kmDaySubEl=document.getElementById('dm-kmday-sub');
-  if(kmDayEl)kmDayEl.textContent=kmDay>0?kmDay.toFixed(1):'—';
-  if(kmDaySubEl)kmDaySubEl.textContent=kmDay>0?'KM per day avg':'need more data';
 
   // ── Monthly & Daily cost — based on ACTUAL fuel spend only ──
   const now=new Date();
@@ -1099,7 +1096,24 @@ function renderDashboard(){
     ?`fuel ₨${fmtPKR(Math.round(monthFuel))}${monthSvc>0?' + svc ₨'+fmtPKR(Math.round(monthSvc)):''}`
     :`${monthName} actual spend`;
 
-  // Daily = this month's total ÷ days elapsed so far
+  // ── KM driven this month — sum of odo span per car from this month's fuel logs ──
+  let monthKM=0;
+  const carIdsInFuel=[...new Set(filteredFuel.map(f=>f.carId))];
+  carIdsInFuel.forEach(cid=>{
+    const carMonthLogs=filteredFuel.filter(f=>f.carId===cid&&f.date&&f.date.startsWith(ym)&&parseFloat(f.odometer||0)>0&&!f.isMissed&&f.fillType!=='missed').sort((a,b)=>parseFloat(a.odometer)-parseFloat(b.odometer));
+    if(carMonthLogs.length>=2){
+      monthKM+=parseFloat(carMonthLogs[carMonthLogs.length-1].odometer)-parseFloat(carMonthLogs[0].odometer);
+    } else if(carMonthLogs.length===1){
+      // Only one log this month — try to get last log from previous month as baseline
+      const prevLog=filteredFuel.filter(f=>f.carId===cid&&f.date&&f.date<ym+'-01'&&parseFloat(f.odometer||0)>0&&!f.isMissed&&f.fillType!=='missed').sort((a,b)=>parseFloat(b.odometer)-parseFloat(a.odometer))[0];
+      if(prevLog)monthKM+=parseFloat(carMonthLogs[0].odometer)-parseFloat(prevLog.odometer);
+    }
+  });
+  const kmPerDay=monthKM>0&&daysPassed>0?(monthKM/daysPassed).toFixed(1):null;
+  if(kmDayEl)kmDayEl.textContent=monthKM>0?fmtKM(Math.round(monthKM))+' KM':'—';
+  if(kmDaySubEl)kmDaySubEl.textContent=kmPerDay?`${kmPerDay} KM/day avg`:`${monthName}`;
+
+  // ── Daily cost = this month's total ÷ days elapsed ──
   const dailyFuelCost=daysPassed>0?monthFuel/daysPassed:0;
   const dailySvcCost=daysPassed>0?monthSvc/daysPassed:0;
   const totalDailyCost=dailyFuelCost+dailySvcCost;
@@ -1354,7 +1368,7 @@ function renderFuelLog(){
       const isFullMissed=f.isMissed||f.fillType==='missed';
       if(isFullMissed){
         return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
-          <td class="mono">${f.date}</td>
+          <td class="mono">${fmtDate(f.date)}</td>
           <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
           <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
           <td class="mono">${fmtKM(f.odometer)} KM</td>
@@ -1366,7 +1380,7 @@ function renderFuelLog(){
       // hasMissed partial/full fill - show data but mark gap
       const pplM=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
       return`<tr style="background:rgba(251,191,36,0.03)">
-        <td class="mono">${f.date}</td>
+        <td class="mono">${fmtDate(f.date)}</td>
         <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
         <td>${f.station||'—'}</td>
         <td>${f.fuelType||'—'}</td>
@@ -1389,7 +1403,7 @@ function renderFuelLog(){
     const prevFuel=getPrevFuel(f);
     const daysSincePrev=prevFuel?Math.round((new Date(f.date)-new Date(prevFuel.date))/(1000*60*60*24)):null;
     return`<tr>
-      <td class="mono">${f.date}</td>
+      <td class="mono">${fmtDate(f.date)}</td>
       <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
       <td>${f.station||'—'}</td>
       <td>${f.fuelType||'—'}</td>
@@ -1429,16 +1443,8 @@ function renderServiceLog(){
   if(cnt>0)badge.textContent=cnt;
 
   if(!filteredSvcLog.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;return;}
-  // Sort: overdue (most overdue first) → due-soon (least KM left first) → ok → done/no-due
-  const svcOrder={'overdue':0,'due-soon':1,'ok':2};
-  const sortedSvcLog=[...filteredSvcLog].sort((a,b)=>{
-    const sa=svcStatus(a),sb=svcStatus(b);
-    const oa=svcOrder[sa]??3,ob=svcOrder[sb]??3;
-    if(oa!==ob)return oa-ob;
-    // Within same status, sort by KM left ascending (most overdue/most urgent first)
-    const ka=kmLeft(a)??999999,kb=kmLeft(b)??999999;
-    return ka-kb;
-  });
+  // Full history: sort by date descending (latest first)
+  const sortedSvcLog=[...filteredSvcLog].sort((a,b)=>b.date.localeCompare(a.date));
   tbody.innerHTML=sortedSvcLog.map(s=>{
     const car=cars.find(c=>c.id===s.carId);
     const st=svcStatus(s);
@@ -1448,7 +1454,7 @@ function renderServiceLog(){
     const isSoldCarSvc=car&&car.status==='sold';
     const rowStyle=st==='overdue'&&!isSoldCarSvc?'background:rgba(248,113,113,0.08);border-left:3px solid var(--red)':st==='due-soon'&&!isSoldCarSvc?'background:rgba(251,191,36,0.06);border-left:3px solid var(--amber)':'';
     return`<tr style="${rowStyle}">
-      <td class="mono">${s.date}</td>
+      <td class="mono">${fmtDate(s.date)}</td>
       <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCarSvc?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
       <td>${s.type}</td>
       <td class="gold mono">₨${fmt(s.cost)}</td>
@@ -2662,6 +2668,8 @@ const n=id=>parseFloat(document.getElementById(id)?.value)||0;
 const fmt=n=>(parseFloat(n)||0).toLocaleString('en-PK');
 const fmtPKR=n=>(parseFloat(n)||0).toLocaleString('en-PK');
 const fmtKM=n=>(parseFloat(n)||0).toLocaleString('en-PK');
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d){if(!d)return'—';const p=d.split('-');if(p.length!==3)return d;return`${p[2]}-${MONTHS[parseInt(p[1],10)-1]}-${p[0]}`;};
 
 window.showToast=function(msg,type='success'){
   const t=document.getElementById('toast');
