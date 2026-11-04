@@ -487,10 +487,10 @@ window.FIREBASE_CONFIG = {
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap" id="fuel-car-filter"></div>
+      <!-- Current Month Summary -->
       <div id="fuel-month-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap" id="fuel-car-filter"></div>
-      <!-- Month Summary Card -->
-      <div id="fuel-month-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"></div>
+      <!-- Month-by-Month History -->
+      <div id="fuel-month-history"></div>
       <div class="chart-grid">
         <div class="chart-panel"><div class="section-head"><h2>KM/L Trend (Full Fills)</h2></div><canvas id="chart-fuel-trend"></canvas></div>
         <div class="chart-panel"><div class="section-head"><h2>Fuel Cost per Month (PKR)</h2></div><canvas id="chart-fuel-cost"></canvas></div>
@@ -1247,30 +1247,35 @@ function buildFuelCarFilter(){
 }
 window.setFuelCar=function(carId,btn){fuelCarId=carId;document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderFuelLog();}
 
+function getMonthStats(logs, ym){
+  const m=logs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed&&f.fillType!=='missed');
+  const cost=m.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const litres=m.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const fills=m.length;
+  // KM per car
+  let km=0;
+  const carIds=[...new Set(logs.map(f=>f.carId))];
+  carIds.forEach(cid=>{
+    const cl=m.filter(f=>f.carId===cid&&parseFloat(f.odometer||0)>0).sort((a,b)=>parseFloat(a.odometer)-parseFloat(b.odometer));
+    if(cl.length>=2) km+=parseFloat(cl[cl.length-1].odometer)-parseFloat(cl[0].odometer);
+    else if(cl.length===1){
+      // try to get prev month odo for this car
+      const prev=logs.filter(f=>f.carId===cid&&f.date&&f.date<ym+'-01'&&parseFloat(f.odometer||0)>0&&!f.isMissed&&f.fillType!=='missed').sort((a,b)=>parseFloat(b.odometer)-parseFloat(a.odometer))[0];
+      if(prev) km+=parseFloat(cl[0].odometer)-parseFloat(prev.odometer);
+    }
+  });
+  const kmpl=litres>0&&km>0?(km/litres).toFixed(1):null;
+  const costPerKm=km>0&&cost>0?(cost/km).toFixed(1):null;
+  return{cost,litres,fills,km:Math.round(km),kmpl,costPerKm};
+}
+
 function renderFuelMonthSummary(logs){
   const el=document.getElementById('fuel-month-summary');if(!el)return;
   const now=new Date();
   const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const monthName=now.toLocaleString('default',{month:'long'})+' '+now.getFullYear();
+  const monthName=now.toLocaleString('en',{month:'long'})+' '+now.getFullYear();
 
-  // This month's entries
-  const m=logs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed&&f.fillType!=='missed');
-  const monthCost=m.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const monthLitres=m.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
-  const monthFills=m.length;
-
-  // KM driven this month: max odo in month minus min odo in month (per car, then sum)
-  let monthKM=0;
-  const carIds=[...new Set(logs.map(f=>f.carId))];
-  carIds.forEach(cid=>{
-    const carMonthLogs=m.filter(f=>f.carId===cid&&parseFloat(f.odometer||0)>0).sort((a,b)=>parseFloat(a.odometer)-parseFloat(b.odometer));
-    if(carMonthLogs.length>=2){
-      monthKM+=parseFloat(carMonthLogs[carMonthLogs.length-1].odometer)-parseFloat(carMonthLogs[0].odometer);
-    }
-  });
-
-  // Cost per KM this month
-  const costPerKm=monthKM>0&&monthCost>0?(monthCost/monthKM).toFixed(1):null;
+  const {cost:monthCost,litres:monthLitres,fills:monthFills,km:monthKM,kmpl:monthKmpl,costPerKm}=getMonthStats(logs,ym);
 
   // Overall avg KM/L (all full fills in filtered logs)
   const fullFills=logs.filter(f=>f.fillType==='full'&&parseFloat(f.kmpl||0)>0);
@@ -1288,14 +1293,78 @@ function renderFuelMonthSummary(logs){
   // Cost per litre this month
   const costPerL=monthLitres>0&&monthCost>0?(monthCost/monthLitres).toFixed(1):null;
 
-  el.innerHTML=[
-    {l:monthName+' Fuel Cost',  v:monthCost>0?'₨'+fmtPKR(monthCost):'—',         s:monthFills+' fill-up'+(monthFills!==1?'s':''),  a:'var(--gold)'},
-    {l:'Litres This Month',     v:monthLitres>0?monthLitres.toFixed(1)+' L':'—',   s:costPerL?'₨'+costPerL+'/litre':'filled',         a:'var(--blue)'},
-    {l:'KM Driven This Month',  v:monthKM>0?fmtKM(monthKM)+' KM':'—',             s:costPerKm?'₨'+costPerKm+' per KM':'odometer range',a:'var(--purple)'},
-    {l:'Avg KM/L',              v:avg?avg+' KM/L':'—',                             s:'across all full fills',                         a:'var(--green)'},
-    {l:'Avg Days/Fill',         v:avgDays?avgDays+' days':'—',                     s:'between fill-ups',                              a:'var(--amber)'},
-    {l:'Last Fill',             v:daysSinceLast!==null?daysSinceLast+' days ago':'—',s:last?last.date:'no fills yet',                 a:'var(--text2)'},
+  const noDataNote=monthFills===0?`<div style="font-size:11px;color:var(--text3);grid-column:1/-1;padding:4px 0">No fill-ups recorded yet for ${monthName}</div>`:'';
+
+  el.innerHTML=noDataNote+[
+    {l:monthName+' Fuel Cost',  v:monthCost>0?'₨'+fmtPKR(monthCost):'—',         s:monthFills+' fill-up'+(monthFills!==1?'s':''),     a:'var(--gold)'},
+    {l:'Litres This Month',     v:monthLitres>0?monthLitres.toFixed(1)+' L':'—',   s:costPerL?'₨'+costPerL+'/litre':'—',               a:'var(--blue)'},
+    {l:'KM Driven This Month',  v:monthKM>0?fmtKM(monthKM)+' KM':'—',             s:costPerKm?'₨'+costPerKm+'/KM':'odometer range',   a:'var(--purple)'},
+    {l:'Avg KM/L (This Month)', v:monthKmpl?monthKmpl+' KM/L':'—',                s:avg?'Overall: '+avg+' KM/L':'full fills only',     a:'var(--green)'},
+    {l:'Avg Days/Fill',         v:avgDays?avgDays+' days':'—',                     s:'between fill-ups',                               a:'var(--amber)'},
+    {l:'Last Fill',             v:daysSinceLast!==null?daysSinceLast+' days ago':'—',s:last?fmtDate(last.date):'no fills yet',         a:'var(--text2)'},
   ].map(x=>`<div class="metric" style="--accent:${x.a}"><div class="m-label">${x.l}</div><div class="m-val" style="font-size:18px;color:${x.a}">${x.v}</div><div class="m-sub">${x.s}</div></div>`).join('');
+
+  // ── Monthly history comparison ───────────────────────────────────
+  renderFuelMonthHistory(logs);
+}
+
+function renderFuelMonthHistory(logs){
+  const el=document.getElementById('fuel-month-history');if(!el)return;
+  // Collect all unique YYYY-MM values present in logs, sorted desc
+  const allYMs=[...new Set(logs.filter(f=>f.date&&!f.isMissed&&f.fillType!=='missed').map(f=>f.date.substring(0,7)))].sort((a,b)=>b.localeCompare(a));
+  if(allYMs.length<1){el.innerHTML='';return;}
+
+  const now=new Date();
+  const currentYm=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  // Show up to 12 months, skipping current (already shown above) if no fills
+  const histYMs=allYMs.filter(ym=>ym!==currentYm).slice(0,11);
+  // Always include current month first
+  const displayYMs=[currentYm,...histYMs];
+
+  const rows=displayYMs.map(ym=>{
+    const d=getMonthStats(logs,ym);
+    const [yr,mn]=ym.split('-');
+    const label=new Date(parseInt(yr),parseInt(mn)-1,1).toLocaleString('en',{month:'short'})+' '+yr;
+    const isCurrent=ym===currentYm;
+    return{ym,label,isCurrent,...d};
+  }).filter(r=>r.fills>0||r.ym===currentYm);
+
+  if(rows.length<2){el.innerHTML='';return;}// only show if there's real history
+
+  el.innerHTML=`
+  <div class="chart-panel" style="margin-top:14px">
+    <div class="section-head"><h2><i class="ti ti-calendar-stats"></i> Month-by-Month Comparison</h2></div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:var(--surface2);color:var(--text2)">
+          <th style="padding:8px 10px;text-align:left;font-weight:600">Month</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">Fuel Cost</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">Litres</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">KM Driven</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">Fills</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">KM/L</th>
+          <th style="padding:8px 10px;text-align:right;font-weight:600">₨/KM</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r,i)=>{
+          const bg=r.isCurrent?'background:color-mix(in srgb,var(--gold) 8%,transparent)':'';
+          const badge=r.isCurrent?` <span style="font-size:10px;background:var(--gold);color:#000;border-radius:3px;padding:1px 4px;vertical-align:middle">NOW</span>`:'';
+          return`<tr style="border-top:1px solid var(--border);${bg}">
+            <td style="padding:8px 10px;font-weight:${r.isCurrent?'600':'400'}">${r.label}${badge}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--gold)">${r.cost>0?'₨'+fmtPKR(r.cost):'—'}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--blue)">${r.litres>0?r.litres.toFixed(1)+' L':'—'}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--purple)">${r.km>0?fmtKM(r.km)+' KM':'—'}</td>
+            <td style="padding:8px 10px;text-align:right">${r.fills||'—'}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--green)">${r.kmpl?r.kmpl:'—'}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--text2)">${r.costPerKm?'₨'+r.costPerKm:'—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
 }
 
 // ── FUEL LOG ──────────────────────────────────────────────────────
