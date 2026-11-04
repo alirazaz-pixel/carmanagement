@@ -927,7 +927,7 @@ function calcDailySvcCost(svcList, carList, fuelList){
     if(!s.nextDueOdo||!s.cost)return;
     const car=carList.find(c=>c.id===s.carId);
     if(!car)return;
-    const curOdo=parseFloat(car.odometer||0);
+    const curOdo=getTrueOdo(s.carId)||parseFloat(car.odometer||0);
     const nextDue=parseFloat(s.nextDueOdo);
     const kmLeft=nextDue-curOdo;
     if(kmLeft<=0)return; // overdue, skip
@@ -1028,15 +1028,17 @@ function buildDashCarFilter(){
 function renderDashboard(){
   buildDashCarFilter();
   // Filter data based on selected car
-  const filteredCars=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
-  const filteredFuel=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs;
-  const filteredSvc=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs;
+  const allFilteredCars=dashCarId?cars.filter(c=>c.id===dashCarId):cars;
+  // Active fleet: exclude sold cars from metrics/cards (unless viewing a specific sold car)
+  const filteredCars=dashCarId?allFilteredCars:allFilteredCars.filter(c=>c.status!=='sold');
+  const filteredFuel=dashCarId?fuelLogs.filter(f=>f.carId===dashCarId):fuelLogs.filter(f=>{const c=cars.find(x=>x.id===f.carId);return c&&c.status!=='sold';});
+  const filteredSvc=dashCarId?serviceLogs.filter(s=>s.carId===dashCarId):serviceLogs.filter(s=>{const c=cars.find(x=>x.id===s.carId);return c&&c.status!=='sold';});
   const selectedCar=dashCarId?cars.find(c=>c.id===dashCarId):null;
 
-  const owned=filteredCars.filter(c=>c.status==='owned').length;
-  const sold=filteredCars.filter(c=>c.status==='sold').length;
-  document.getElementById('dm-cars').textContent=filteredCars.length;
-  document.getElementById('dm-cars-sub').textContent=`${owned} owned · ${sold} sold`;
+  const owned=allFilteredCars.filter(c=>c.status==='owned').length;
+  const sold=allFilteredCars.filter(c=>c.status==='sold').length;
+  document.getElementById('dm-cars').textContent=owned;
+  document.getElementById('dm-cars-sub').textContent=`active · ${sold} sold`;
   document.getElementById('dash-sub').textContent=selectedCar?`${selectedCar.make} ${selectedCar.model} ${selectedCar.year||''}`:`${cars.length} vehicle${cars.length!==1?'s':''} tracked`;
 
   const fullFills=filteredFuel.filter(f=>f.fillType==='full'&&f.kmpl>0);
@@ -1051,7 +1053,11 @@ function renderDashboard(){
   plEl.textContent=totalPL===0?'PKR 0':(totalPL>0?'+':'')+fmtPKR(totalPL);
   plEl.className='m-val '+(totalPL>0?'green':totalPL<0?'red':'');
 
-  const alerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').length;
+  // Deduplicate per car+type, use latest record only
+  const latestSvcPerType={};
+  filteredSvc.forEach(s=>{const k=s.carId+'|'+s.type;if(!latestSvcPerType[k]||s.date>latestSvcPerType[k].date)latestSvcPerType[k]=s;});
+  const dedupedSvc=Object.values(latestSvcPerType);
+  const alerts=dedupedSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').length;
   document.getElementById('dm-alerts').textContent=alerts;
   const badge=document.getElementById('svc-badge');
   badge.style.display=alerts>0?'inline':'none';
@@ -1070,34 +1076,42 @@ function renderDashboard(){
   if(kmDayEl)kmDayEl.textContent=kmDay>0?kmDay.toFixed(1):'—';
   if(kmDaySubEl)kmDaySubEl.textContent=kmDay>0?'KM per day avg':'need more data';
 
-  // ── Daily cost ──
-  const dailyFuelCost=filteredFuel.length>0?(()=>{
-    const now2=new Date();
-    const ym2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
-    const monthFuelTotal=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym2)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-    const daysPassed=now2.getDate();
-    return daysPassed>0?monthFuelTotal/daysPassed:0;
-  })():0;
-  const dailySvcCost=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel);
+  // ── Monthly & Daily cost — based on ACTUAL fuel spend only ──
+  const now=new Date();
+  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthName=now.toLocaleString('default',{month:'short'})+' '+now.getFullYear();
+  const daysPassed=now.getDate();
+
+  // Actual fuel cost this month
+  const monthFuelLogs=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed&&f.fillType!=='missed');
+  const monthFuel=monthFuelLogs.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const monthLitres=monthFuelLogs.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const monthFills=monthFuelLogs.length;
+
+  // Actual service cost this month
+  const monthSvc=filteredSvc.filter(s=>s.date&&s.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+
+  const totalMonthly=monthFuel+monthSvc;
+  const monthlyEl=document.getElementById('dm-monthly');
+  const monthlySubEl=document.getElementById('dm-monthly-sub');
+  if(monthlyEl)monthlyEl.textContent=totalMonthly>0?fmtPKR(Math.round(totalMonthly)):'—';
+  if(monthlySubEl)monthlySubEl.textContent=totalMonthly>0
+    ?`fuel ₨${fmtPKR(Math.round(monthFuel))}${monthSvc>0?' + svc ₨'+fmtPKR(Math.round(monthSvc)):''}`
+    :`${monthName} actual spend`;
+
+  // Daily = this month's total ÷ days elapsed so far
+  const dailyFuelCost=daysPassed>0?monthFuel/daysPassed:0;
+  const dailySvcCost=daysPassed>0?monthSvc/daysPassed:0;
   const totalDailyCost=dailyFuelCost+dailySvcCost;
   const dailyEl=document.getElementById('dm-daily');
   const dailySubEl=document.getElementById('dm-daily-sub');
   if(dailyEl)dailyEl.textContent=totalDailyCost>0?fmtPKR(Math.round(totalDailyCost)):'—';
-  if(dailySubEl)dailySubEl.textContent=totalDailyCost>0?'fuel ₨'+Math.round(dailyFuelCost)+' + svc ₨'+Math.round(dailySvcCost):'PKR per day';
+  if(dailySubEl)dailySubEl.textContent=totalDailyCost>0
+    ?`${monthName} avg · ${daysPassed} days`
+    :'PKR per day';
 
-  // ── Monthly cost (fuel actual + service spread over month) ──
-  const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const monthFuel=filteredFuel.filter(f=>f.date&&f.date.startsWith(ym)).reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  const monthlySvcSpread=calcDailySvcCost(filteredSvc,filteredCars,filteredFuel)*daysInMonth;
-  const totalMonthly=monthFuel+monthlySvcSpread;
-  const monthlyEl=document.getElementById('dm-monthly');
-  const monthlySubEl=document.getElementById('dm-monthly-sub');
-  if(monthlyEl)monthlyEl.textContent=totalMonthly>0?fmtPKR(Math.round(totalMonthly)):'—';
-  if(monthlySubEl)monthlySubEl.textContent=totalMonthly>0?'fuel ₨'+fmtPKR(Math.round(monthFuel))+' + svc est.':'fuel + service PKR';
-
-  renderCarCards('dash-cars',filteredCars.slice(0,6));
-  const svcAlerts=filteredSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
+  renderCarCards('dash-cars',filteredCars.filter(c=>c.status!=='sold').slice(0,6));
+  const svcAlerts=dedupedSvc.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon').slice(0,5);
   renderSvcAlerts('dash-services',svcAlerts);
 }
 
@@ -1215,30 +1229,59 @@ window.setSvcCar=function(carId,btn){svcCarId=carId;document.querySelectorAll('#
 function buildFuelCarFilter(){
   const wrap=document.getElementById('fuel-car-filter');if(!wrap)return;
   wrap.innerHTML='<button class="tab-btn '+(fuelCarId===null?'active':'')+'" onclick="setFuelCar(null,this)" style="font-size:12px;padding:5px 12px">All Cars</button>';
-  cars.forEach(c=>{const btn=document.createElement('button');btn.className='tab-btn'+(fuelCarId===c.id?' active':'');btn.style.cssText='font-size:12px;padding:5px 12px';btn.textContent=c.make+' '+c.model;btn.onclick=function(){setFuelCar(c.id,this);};wrap.appendChild(btn);});
+  cars.forEach(c=>{const btn=document.createElement('button');btn.className='tab-btn'+(fuelCarId===c.id?' active':'');btn.style.cssText='font-size:12px;padding:5px 12px';btn.textContent=c.make+' '+c.model+(c.status==='sold'?' [Sold]':'');btn.onclick=function(){setFuelCar(c.id,this);};wrap.appendChild(btn);});
 }
 window.setFuelCar=function(carId,btn){fuelCarId=carId;document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderFuelLog();}
 
 function renderFuelMonthSummary(logs){
   const el=document.getElementById('fuel-month-summary');if(!el)return;
-  const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const m=logs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed);
-  const cost=m.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
-  const litres=m.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
-  const fills=logs.filter(f=>f.fillType==='full'&&f.kmpl>0);
-  const avg=fills.length?(fills.reduce((a,b)=>a+b.kmpl,0)/fills.length).toFixed(1):null;
-  const sorted=[...logs].filter(f=>!f.isMissed&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const gaps=[];for(let i=1;i<sorted.length;i++){const d=(new Date(sorted[i].date)-new Date(sorted[i-1].date))/(86400000);if(d>0)gaps.push(d);}
+  const now=new Date();
+  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthName=now.toLocaleString('default',{month:'long'})+' '+now.getFullYear();
+
+  // This month's entries
+  const m=logs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed&&f.fillType!=='missed');
+  const monthCost=m.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const monthLitres=m.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const monthFills=m.length;
+
+  // KM driven this month: max odo in month minus min odo in month (per car, then sum)
+  let monthKM=0;
+  const carIds=[...new Set(logs.map(f=>f.carId))];
+  carIds.forEach(cid=>{
+    const carMonthLogs=m.filter(f=>f.carId===cid&&parseFloat(f.odometer||0)>0).sort((a,b)=>parseFloat(a.odometer)-parseFloat(b.odometer));
+    if(carMonthLogs.length>=2){
+      monthKM+=parseFloat(carMonthLogs[carMonthLogs.length-1].odometer)-parseFloat(carMonthLogs[0].odometer);
+    }
+  });
+
+  // Cost per KM this month
+  const costPerKm=monthKM>0&&monthCost>0?(monthCost/monthKM).toFixed(1):null;
+
+  // Overall avg KM/L (all full fills in filtered logs)
+  const fullFills=logs.filter(f=>f.fillType==='full'&&parseFloat(f.kmpl||0)>0);
+  const avg=fullFills.length?(fullFills.reduce((a,b)=>a+parseFloat(b.kmpl),0)/fullFills.length).toFixed(1):null;
+
+  // Avg days between fills (all time)
+  const sorted=[...logs].filter(f=>!f.isMissed&&f.fillType!=='missed'&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const gaps=[];for(let i=1;i<sorted.length;i++){const d=(new Date(sorted[i].date)-new Date(sorted[i-1].date))/86400000;if(d>0)gaps.push(d);}
   const avgDays=gaps.length?(gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(0):null;
+
+  // Last fill
   const last=sorted[sorted.length-1];
-  const daysSince=last?Math.floor((Date.now()-new Date(last.date))/(86400000)):null;
+  const daysSinceLast=last?Math.floor((Date.now()-new Date(last.date))/86400000):null;
+
+  // Cost per litre this month
+  const costPerL=monthLitres>0&&monthCost>0?(monthCost/monthLitres).toFixed(1):null;
+
   el.innerHTML=[
-    {l:'This Month Cost',v:cost>0?'₨'+fmtPKR(cost):'—',s:'PKR',a:'var(--gold)'},
-    {l:'This Month Litres',v:litres>0?litres.toFixed(1)+' L':'—',s:'filled',a:'var(--blue)'},
-    {l:'Avg KM/L',v:avg?avg+' KM/L':'—',s:'full fills',a:'var(--green)'},
-    {l:'Avg Days/Fill',v:avgDays?avgDays+' days':'—',s:'between fills',a:'var(--purple)'},
-    {l:'Last Fill',v:daysSince!==null?daysSince+' days ago':'—',s:last?last.date:'',a:'var(--amber)'},
-  ].map(m=>`<div class="metric" style="--accent:${m.a}"><div class="m-label">${m.l}</div><div class="m-val" style="font-size:18px;color:${m.a}">${m.v}</div><div class="m-sub">${m.s}</div></div>`).join('');
+    {l:monthName+' Fuel Cost',  v:monthCost>0?'₨'+fmtPKR(monthCost):'—',         s:monthFills+' fill-up'+(monthFills!==1?'s':''),  a:'var(--gold)'},
+    {l:'Litres This Month',     v:monthLitres>0?monthLitres.toFixed(1)+' L':'—',   s:costPerL?'₨'+costPerL+'/litre':'filled',         a:'var(--blue)'},
+    {l:'KM Driven This Month',  v:monthKM>0?fmtKM(monthKM)+' KM':'—',             s:costPerKm?'₨'+costPerKm+' per KM':'odometer range',a:'var(--purple)'},
+    {l:'Avg KM/L',              v:avg?avg+' KM/L':'—',                             s:'across all full fills',                         a:'var(--green)'},
+    {l:'Avg Days/Fill',         v:avgDays?avgDays+' days':'—',                     s:'between fill-ups',                              a:'var(--amber)'},
+    {l:'Last Fill',             v:daysSinceLast!==null?daysSinceLast+' days ago':'—',s:last?last.date:'no fills yet',                 a:'var(--text2)'},
+  ].map(x=>`<div class="metric" style="--accent:${x.a}"><div class="m-label">${x.l}</div><div class="m-val" style="font-size:18px;color:${x.a}">${x.v}</div><div class="m-sub">${x.s}</div></div>`).join('');
 }
 
 // ── FUEL LOG ──────────────────────────────────────────────────────
@@ -1280,14 +1323,28 @@ function renderFuelLog(){
     if(f.isMissed||f.hasMissed||f.fillType==='missed')return null;
     if(f.kmpl&&parseFloat(f.kmpl)>0)return parseFloat(f.kmpl);
     if(f.fillType!=='full')return null;
+    // Tank method: accumulate all partial fills since last full fill
+    const logs=carLogs[f.carId]||[];
+    const idx=logs.findIndex(x=>x.id===f.id);
+    let totalLitres=parseFloat(f.litres||0);
+    // Walk backwards to collect partials since last full
+    for(let i=idx-1;i>=0;i--){
+      const prev=logs[i];
+      if(prev.isMissed||prev.hasMissed||prev.fillType==='missed')continue;
+      if(prev.fillType==='full')break; // stop at previous full fill
+      totalLitres+=parseFloat(prev.litres||0); // add partial litres
+    }
     const dist=getCalcDistance(f);
-    const litres=parseFloat(f.litres||0);
-    if(dist&&litres>0)return parseFloat((dist/litres).toFixed(2));
+    if(dist&&totalLitres>0)return parseFloat((dist/totalLitres).toFixed(2));
     return null;
   }
 
-  tbody.innerHTML=filteredFuelLog.map(f=>{
+  // Sort all entries by date descending (newest first) for display
+  // Sort all entries by date descending (newest first), show ALL entries (no limit)
+  const sortedFuelLog=[...filteredFuelLog].sort((a,b)=>new Date(b.date)-new Date(a.date)||parseFloat(b.odometer||0)-parseFloat(a.odometer||0));
+  tbody.innerHTML=sortedFuelLog.map(f=>{
     const car=cars.find(c=>c.id===f.carId);
+    const isSoldCar=car&&car.status==='sold';
     const actionBtns=`<td style="white-space:nowrap">
         <button onclick="event.stopPropagation();editFuel('${f.id}')" style="background:var(--bg4);border:1px solid var(--border);border-radius:5px;color:var(--text2);padding:3px 8px;cursor:pointer;font-size:11px;margin-right:4px"><i class="ti ti-edit" style="font-size:12px"></i></button>
         <button onclick="event.stopPropagation();deleteFuel('${f.id}')" style="background:var(--red-bg);border:1px solid rgba(248,113,113,0.2);border-radius:5px;color:var(--red);padding:3px 8px;cursor:pointer;font-size:11px"><i class="ti ti-trash" style="font-size:12px"></i></button>
@@ -1298,7 +1355,7 @@ function renderFuelLog(){
       if(isFullMissed){
         return`<tr style="opacity:0.65;background:rgba(251,191,36,0.04)">
           <td class="mono">${f.date}</td>
-          <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+          <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
           <td colspan="6" style="color:var(--amber);font-size:12px">⚠️ Missed checkpoint — gap in fuel data. Odometer: ${fmtKM(f.odometer)} KM</td>
           <td class="mono">${fmtKM(f.odometer)} KM</td>
           <td>—</td>
@@ -1310,7 +1367,7 @@ function renderFuelLog(){
       const pplM=f.litres&&f.cost?(parseFloat(f.cost)/parseFloat(f.litres)).toFixed(2):'—';
       return`<tr style="background:rgba(251,191,36,0.03)">
         <td class="mono">${f.date}</td>
-        <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+        <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
         <td>${f.station||'—'}</td>
         <td>${f.fuelType||'—'}</td>
         <td class="mono">${f.litres} L</td>
@@ -1333,7 +1390,7 @@ function renderFuelLog(){
     const daysSincePrev=prevFuel?Math.round((new Date(f.date)-new Date(prevFuel.date))/(1000*60*60*24)):null;
     return`<tr>
       <td class="mono">${f.date}</td>
-      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCar?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
       <td>${f.station||'—'}</td>
       <td>${f.fuelType||'—'}</td>
       <td class="mono">${f.litres} L</td>
@@ -1354,7 +1411,14 @@ function renderServiceLog(){
   buildSvcCarFilter();
   const filteredSvcLog=svcCarId?serviceLogs.filter(s=>s.carId===svcCarId):serviceLogs;
   const tbody=document.getElementById('svc-tbody');
-  const alerts=filteredSvcLog.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon');
+  // Deduplicate: for each car+type, keep only the latest service record
+  const latestPerType={};
+  filteredSvcLog.forEach(s=>{
+    const key=s.carId+'|'+s.type;
+    if(!latestPerType[key]||s.date>latestPerType[key].date)latestPerType[key]=s;
+  });
+  const deduped=Object.values(latestPerType);
+  const alerts=deduped.filter(s=>svcStatus(s)==='overdue'||svcStatus(s)==='due-soon');
   renderSvcAlerts('svc-alerts-list',alerts);
   renderSvcAlerts('dash-services',alerts.slice(0,5));
 
@@ -1365,15 +1429,27 @@ function renderServiceLog(){
   if(cnt>0)badge.textContent=cnt;
 
   if(!filteredSvcLog.length){tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state" style="padding:30px"><i class="ti ti-tool"></i><h3>No service records</h3></div></td></tr>`;return;}
-  tbody.innerHTML=filteredSvcLog.map(s=>{
+  // Sort: overdue (most overdue first) → due-soon (least KM left first) → ok → done/no-due
+  const svcOrder={'overdue':0,'due-soon':1,'ok':2};
+  const sortedSvcLog=[...filteredSvcLog].sort((a,b)=>{
+    const sa=svcStatus(a),sb=svcStatus(b);
+    const oa=svcOrder[sa]??3,ob=svcOrder[sb]??3;
+    if(oa!==ob)return oa-ob;
+    // Within same status, sort by KM left ascending (most overdue/most urgent first)
+    const ka=kmLeft(a)??999999,kb=kmLeft(b)??999999;
+    return ka-kb;
+  });
+  tbody.innerHTML=sortedSvcLog.map(s=>{
     const car=cars.find(c=>c.id===s.carId);
     const st=svcStatus(s);
     const kl=kmLeft(s);
     const ds=daysSince(s.date);
     const curOdo=car?parseFloat(car.odometer||0):0;
-    return`<tr>
+    const isSoldCarSvc=car&&car.status==='sold';
+    const rowStyle=st==='overdue'&&!isSoldCarSvc?'background:rgba(248,113,113,0.08);border-left:3px solid var(--red)':st==='due-soon'&&!isSoldCarSvc?'background:rgba(251,191,36,0.06);border-left:3px solid var(--amber)':'';
+    return`<tr style="${rowStyle}">
       <td class="mono">${s.date}</td>
-      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}</td>
+      <td class="primary">${car?`${car.make} ${car.model}`:'Unknown'}${isSoldCarSvc?` <span class="badge sold" style="font-size:10px">Sold</span>`:''}</td>
       <td>${s.type}</td>
       <td class="gold mono">₨${fmt(s.cost)}</td>
       <td class="mono">${fmtKM(s.odometer)} KM</td>
@@ -1550,8 +1626,25 @@ function renderInsights(){
     }
   });
 
-  if(!items.length){grid.innerHTML=`<div class="empty-state"><i class="ti ti-bulb"></i><h3>Add more data</h3><p>Insights appear after logging fuel fill-ups and service records.</p></div>`;return;}
-  grid.innerHTML=items.map(i=>`<div class="insight-card">
+  // Always show total fuel summary card at the top
+  const totalLitres=fuelLogs.filter(f=>!f.isMissed&&f.fillType!=='missed').reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
+  const totalFuelCost=fuelLogs.filter(f=>!f.isMissed&&f.fillType!=='missed').reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const totalSvcCostAll=serviceLogs.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
+  const summaryCard=`<div class="insight-card" style="grid-column:1/-1;background:linear-gradient(135deg,rgba(59,130,246,0.08),rgba(139,92,246,0.08));border:1px solid rgba(59,130,246,0.2)">
+    <div class="insight-icon" style="background:rgba(59,130,246,0.15);color:var(--blue)"><i class="ti ti-gas-station"></i></div>
+    <div class="insight-text">
+      <h4>Fleet Fuel Summary</h4>
+      <p style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px">
+        <span><span style="color:var(--text3);font-size:12px">Total Fuel Used</span><br><strong style="font-size:18px;color:var(--blue)">${totalLitres.toFixed(1)} L</strong></span>
+        <span><span style="color:var(--text3);font-size:12px">Total Fuel Cost</span><br><strong style="font-size:18px;color:var(--gold)">₨${fmtPKR(Math.round(totalFuelCost))}</strong></span>
+        <span><span style="color:var(--text3);font-size:12px">Total Service Cost</span><br><strong style="font-size:18px;color:var(--amber)">₨${fmtPKR(Math.round(totalSvcCostAll))}</strong></span>
+        <span><span style="color:var(--text3);font-size:12px">Total Fleet Spend</span><br><strong style="font-size:18px;color:var(--text1)">₨${fmtPKR(Math.round(totalFuelCost+totalSvcCostAll))}</strong></span>
+      </p>
+    </div>
+  </div>`;
+
+  if(!items.length){grid.innerHTML=summaryCard+`<div class="insight-card"><div class="insight-icon" style="background:var(--bg3);color:var(--text3)"><i class="ti ti-bulb"></i></div><div class="insight-text"><h4>Add more data</h4><p>Insights appear after logging fuel fill-ups and service records.</p></div></div>`;return;}
+  grid.innerHTML=summaryCard+items.map(i=>`<div class="insight-card">
     <div class="insight-icon" style="background:${i.col}20;color:${i.col}"><i class="ti ${i.icon}"></i></div>
     <div class="insight-text"><h4>${i.title}</h4><p>${i.text}</p></div>
   </div>`).join('');
@@ -2148,7 +2241,7 @@ window.showModal=function(type,data={}){
 }
 
 window.closeModal=function(){document.getElementById('modal-overlay').classList.remove('open');}
-document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
+// Modal only closes via X button — not by clicking outside or moving mouse
 
 // ── SAVE FUNCTIONS ────────────────────────────────────────────────
 window.saveCar=async function(editId=''){
@@ -2440,11 +2533,11 @@ window.exportDashboardPDF=function(){
 window.exportFuelLogPDF=function(){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF('l');
-  const exportLogs=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
+  const exportLogs=[...(fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs)].sort((a,b)=>new Date(b.date)-new Date(a.date));
   const carName=fuelCarId?cars.find(c=>c.id===fuelCarId)?.make+' '+cars.find(c=>c.id===fuelCarId)?.model:'All Cars';
-  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log ('+carName+')',14,18);
+  doc.setFontSize(16);doc.text('FleetLedger — Fuel Log ('+carName+') — All '+exportLogs.length+' records',14,18);
   doc.setFontSize(10);doc.text('Generated: '+new Date().toLocaleDateString(),14,26);
-  const rows=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`:'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
+  const rows=exportLogs.map(f=>{const c=cars.find(x=>x.id===f.carId);const ppl=f.litres&&f.cost?(f.cost/f.litres).toFixed(2):'—';return[f.date,c?`${c.make} ${c.model}`+(c.status==='sold'?' [Sold]':''):'',f.station||'—',f.fillType,f.litres+'L','₨'+ppl,f.cost?'₨'+parseFloat(f.cost).toLocaleString():'—',f.odometer?parseFloat(f.odometer).toLocaleString()+' KM':'—',f.distance?parseFloat(f.distance).toLocaleString()+' KM':'—',f.kmpl>0?f.kmpl.toFixed(1):'—'];});
   doc.autoTable({startY:32,head:[['Date','Car','Station','Type','Litres','PKR/L','Total','ODO','Distance','KM/L']],body:rows,styles:{fontSize:8},headStyles:{fillColor:[15,15,26],textColor:[232,196,74]}});
   doc.save('FuelLog_'+(fuelCarId?carName.replace(/ /g,'_')+'_':'')+new Date().toISOString().slice(0,10)+'.pdf');
   showToast('PDF exported!');
