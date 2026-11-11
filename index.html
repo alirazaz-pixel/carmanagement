@@ -1247,39 +1247,75 @@ function buildFuelCarFilter(){
 }
 window.setFuelCar=function(carId,btn){fuelCarId=carId;document.querySelectorAll('#fuel-car-filter .tab-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderFuelLog();}
 
-function getMonthStats(logs, ym){
+// Standalone tank-method KM/L calculator (mirror of the one inside renderFuelLog)
+// carLogs must be sorted by odometer ascending
+function calcTankKmpl(f, carLogs){
+  if(f.isMissed||f.hasMissed||f.fillType==='missed')return null;
+  if(f.kmpl&&parseFloat(f.kmpl)>0)return parseFloat(f.kmpl); // manually entered
+  if(f.fillType!=='full')return null;
+  const logs=carLogs[f.carId]||[];
+  const idx=logs.findIndex(x=>x.id===f.id);
+  if(idx<0)return null;
+  let totalLitres=parseFloat(f.litres||0);
+  let prevFullOdo=null;
+  for(let i=idx-1;i>=0;i--){
+    const prev=logs[i];
+    if(prev.isMissed||prev.hasMissed||prev.fillType==='missed')continue;
+    if(prev.fillType==='full'){prevFullOdo=parseFloat(prev.odometer||0)||null;break;}
+    totalLitres+=parseFloat(prev.litres||0);
+  }
+  const currentOdo=parseFloat(f.odometer||0);
+  let dist=null;
+  if(f.distance&&parseFloat(f.distance)>0) dist=parseFloat(f.distance);
+  else if(prevFullOdo&&currentOdo>prevFullOdo) dist=currentOdo-prevFullOdo;
+  if(dist&&totalLitres>0)return parseFloat((dist/totalLitres).toFixed(2));
+  return null;
+}
+
+function getMonthStats(logs, ym, carLogs){
   const m=logs.filter(f=>f.date&&f.date.startsWith(ym)&&!f.isMissed&&f.fillType!=='missed');
   const cost=m.reduce((a,b)=>a+(parseFloat(b.cost)||0),0);
   const litres=m.reduce((a,b)=>a+(parseFloat(b.litres)||0),0);
   const fills=m.length;
-  // KM per car
+  // KM per car (odo span within the month)
   let km=0;
   const carIds=[...new Set(logs.map(f=>f.carId))];
   carIds.forEach(cid=>{
     const cl=m.filter(f=>f.carId===cid&&parseFloat(f.odometer||0)>0).sort((a,b)=>parseFloat(a.odometer)-parseFloat(b.odometer));
     if(cl.length>=2) km+=parseFloat(cl[cl.length-1].odometer)-parseFloat(cl[0].odometer);
     else if(cl.length===1){
-      // try to get prev month odo for this car
       const prev=logs.filter(f=>f.carId===cid&&f.date&&f.date<ym+'-01'&&parseFloat(f.odometer||0)>0&&!f.isMissed&&f.fillType!=='missed').sort((a,b)=>parseFloat(b.odometer)-parseFloat(a.odometer))[0];
       if(prev) km+=parseFloat(cl[0].odometer)-parseFloat(prev.odometer);
     }
   });
-  const kmpl=litres>0&&km>0?(km/litres).toFixed(1):null;
+  // KM/L: use tank-method calculation on full fills this month (weighted by litres)
+  let kmpl=null;
+  if(carLogs){
+    const fullFills=m.filter(f=>f.fillType==='full');
+    const withKmpl=fullFills.map(f=>({f,k:calcTankKmpl(f,carLogs)})).filter(x=>x.k);
+    if(withKmpl.length>0){
+      const wSum=withKmpl.reduce((a,x)=>a+x.k*parseFloat(x.f.litres||1),0);
+      const lSum=withKmpl.reduce((a,x)=>a+parseFloat(x.f.litres||0),0);
+      kmpl=lSum>0?(wSum/lSum).toFixed(1):null;
+    }
+  }
+  if(!kmpl&&litres>0&&km>0) kmpl=(km/litres).toFixed(1); // fallback
   const costPerKm=km>0&&cost>0?(cost/km).toFixed(1):null;
   return{cost,litres,fills,km:Math.round(km),kmpl,costPerKm};
 }
 
-function renderFuelMonthSummary(logs){
+function renderFuelMonthSummary(logs, carLogs){
   const el=document.getElementById('fuel-month-summary');if(!el)return;
   const now=new Date();
   const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const monthName=now.toLocaleString('en',{month:'long'})+' '+now.getFullYear();
 
-  const {cost:monthCost,litres:monthLitres,fills:monthFills,km:monthKM,kmpl:monthKmpl,costPerKm}=getMonthStats(logs,ym);
+  const {cost:monthCost,litres:monthLitres,fills:monthFills,km:monthKM,kmpl:monthKmpl,costPerKm}=getMonthStats(logs,ym,carLogs);
 
-  // Overall avg KM/L (all full fills in filtered logs)
-  const fullFills=logs.filter(f=>f.fillType==='full'&&parseFloat(f.kmpl||0)>0);
-  const avg=fullFills.length?(fullFills.reduce((a,b)=>a+parseFloat(b.kmpl),0)/fullFills.length).toFixed(1):null;
+  // Overall avg KM/L (all full fills — use tank-method where available)
+  const allFullFills=logs.filter(f=>f.fillType==='full');
+  const allKmpls=carLogs?allFullFills.map(f=>calcTankKmpl(f,carLogs)).filter(k=>k):allFullFills.map(f=>parseFloat(f.kmpl||0)).filter(k=>k>0);
+  const avg=allKmpls.length?(allKmpls.reduce((a,b)=>a+b,0)/allKmpls.length).toFixed(1):null;
 
   // Avg days between fills (all time)
   const sorted=[...logs].filter(f=>!f.isMissed&&f.fillType!=='missed'&&f.date).sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -1305,10 +1341,10 @@ function renderFuelMonthSummary(logs){
   ].map(x=>`<div class="metric" style="--accent:${x.a}"><div class="m-label">${x.l}</div><div class="m-val" style="font-size:18px;color:${x.a}">${x.v}</div><div class="m-sub">${x.s}</div></div>`).join('');
 
   // ── Monthly history comparison ───────────────────────────────────
-  renderFuelMonthHistory(logs);
+  renderFuelMonthHistory(logs, carLogs);
 }
 
-function renderFuelMonthHistory(logs){
+function renderFuelMonthHistory(logs, carLogs){
   const el=document.getElementById('fuel-month-history');if(!el)return;
   // Collect all unique YYYY-MM values present in logs, sorted desc
   const allYMs=[...new Set(logs.filter(f=>f.date&&!f.isMissed&&f.fillType!=='missed').map(f=>f.date.substring(0,7)))].sort((a,b)=>b.localeCompare(a));
@@ -1322,7 +1358,7 @@ function renderFuelMonthHistory(logs){
   const displayYMs=[currentYm,...histYMs];
 
   const rows=displayYMs.map(ym=>{
-    const d=getMonthStats(logs,ym);
+    const d=getMonthStats(logs,ym,carLogs);
     const [yr,mn]=ym.split('-');
     const label=new Date(parseInt(yr),parseInt(mn)-1,1).toLocaleString('en',{month:'short'})+' '+yr;
     const isCurrent=ym===currentYm;
@@ -1371,11 +1407,8 @@ function renderFuelMonthHistory(logs){
 function renderFuelLog(){
   buildFuelCarFilter();
   const filteredFuelLog=fuelCarId?fuelLogs.filter(f=>f.carId===fuelCarId):fuelLogs;
-  renderFuelMonthSummary(filteredFuelLog);
-  const tbody=document.getElementById('fuel-tbody');
-  if(!filteredFuelLog.length){tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
 
-  // Build per-car sorted fuel log to calculate distance on the fly
+  // Build per-car sorted fuel log FIRST (needed for KM/L calculations in summary too)
   const carLogs={};
   filteredFuelLog.forEach(f=>{
     if(!carLogs[f.carId])carLogs[f.carId]=[];
@@ -1385,6 +1418,11 @@ function renderFuelLog(){
   Object.keys(carLogs).forEach(cid=>{
     carLogs[cid].sort((a,b)=>parseFloat(a.odometer||0)-parseFloat(b.odometer||0));
   });
+
+  renderFuelMonthSummary(filteredFuelLog, carLogs);
+  const tbody=document.getElementById('fuel-tbody');
+  if(!filteredFuelLog.length){tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state" style="padding:30px"><i class="ti ti-droplet-off"></i><h3>No fill-ups logged</h3></div></td></tr>`;return;}
+
   // For each log, find previous non-missed entry for same car
   function getPrevFuel(f){
     const logs=carLogs[f.carId]||[];
