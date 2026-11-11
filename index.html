@@ -1410,14 +1410,27 @@ function renderFuelLog(){
     const logs=carLogs[f.carId]||[];
     const idx=logs.findIndex(x=>x.id===f.id);
     let totalLitres=parseFloat(f.litres||0);
-    // Walk backwards to collect partials since last full
+    let prevFullOdo=null;
+    // Walk backwards: collect partial litres AND find previous full fill odo
     for(let i=idx-1;i>=0;i--){
       const prev=logs[i];
       if(prev.isMissed||prev.hasMissed||prev.fillType==='missed')continue;
-      if(prev.fillType==='full')break; // stop at previous full fill
-      totalLitres+=parseFloat(prev.litres||0); // add partial litres
+      if(prev.fillType==='full'){
+        prevFullOdo=parseFloat(prev.odometer||0)||null;
+        break; // stop — previous full fill found
+      }
+      totalLitres+=parseFloat(prev.litres||0); // accumulate partial
     }
-    const dist=getCalcDistance(f);
+    // Distance must span from previous FULL fill to now (not just previous entry)
+    const currentOdo=parseFloat(f.odometer||0);
+    let dist=null;
+    if(f.distance&&parseFloat(f.distance)>0){
+      dist=parseFloat(f.distance); // manually entered distance — trust it
+    } else if(prevFullOdo&&currentOdo>prevFullOdo){
+      dist=currentOdo-prevFullOdo; // correct: full fill to full fill span
+    } else {
+      dist=getCalcDistance(f); // fallback when no previous full fill exists
+    }
     if(dist&&totalLitres>0)return parseFloat((dist/totalLitres).toFixed(2));
     return null;
   }
